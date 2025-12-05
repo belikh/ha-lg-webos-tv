@@ -49,11 +49,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._host = user_input[CONF_IP_ADDRESS]
             self._name = user_input.get(CONF_NAME, "LG WebOS TV")
 
-            await self.async_set_unique_id(self._host)
-            self._abort_if_unique_id_configured()
-
-            # Prepare key file path
-            # We use a file in .storage for this host
+            # Use a temporary key file path for pairing
             filename = f"bscpylgtv_{self._host.replace('.', '_')}.sqlite"
             self._key_file_path = self.hass.config.path(".storage", filename)
 
@@ -71,7 +67,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                # Ensure directory exists (should exist but good practice)
+                # Ensure directory exists
                 os.makedirs(os.path.dirname(self._key_file_path), exist_ok=True)
 
                 self._client = await WebOsClient.create(
@@ -81,8 +77,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     states=[]
                 )
 
-                # Connect. This might block waiting for user input on TV.
-                # We set a timeout for the user to accept.
+                # Connect and Pairing
                 try:
                     await asyncio.wait_for(self._client.connect(), timeout=60)
                 except asyncio.TimeoutError:
@@ -92,7 +87,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     return self.async_show_form(step_id="pairing", errors=errors)
 
                 if self._client.is_registered():
+                    try:
+                         # Force fetch hello info to get UUID
+                         hello_info = await self._client.get_hello_info()
+                         device_uuid = hello_info.get("deviceUUID")
+                    except Exception:
+                        _LOGGER.warning("Could not fetch device UUID, falling back to IP")
+                        device_uuid = self._host
+
                     await self._client.disconnect()
+
+                    if device_uuid:
+                        await self.async_set_unique_id(device_uuid)
+                        self._abort_if_unique_id_configured()
+
                     return self.async_create_entry(
                         title=self._name,
                         data={
@@ -130,9 +138,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="no_host")
 
         self._name = discovery_info.upnp.get(ssdp.ATTR_UPNP_FRIENDLY_NAME, "LG WebOS TV")
+        uuid = discovery_info.upnp.get(ssdp.ATTR_UPNP_UDN)
 
-        await self.async_set_unique_id(self._host)
-        self._abort_if_unique_id_configured()
+        # Clean UUID (often has uuid: prefix)
+        if uuid and uuid.startswith("uuid:"):
+            uuid = uuid[5:]
+
+        if uuid:
+            await self.async_set_unique_id(uuid)
+            self._abort_if_unique_id_configured()
 
         self.context["title_placeholders"] = {"name": self._name}
         return await self.async_step_user({CONF_IP_ADDRESS: self._host, CONF_NAME: self._name})

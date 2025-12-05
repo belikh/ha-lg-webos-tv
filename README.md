@@ -12,9 +12,16 @@ It is designed to "expose everything" possible from the library, including advan
     *   Source selection (Inputs and Apps).
     *   Play/Pause/Stop/Next/Previous.
     *   `play_media` support for launching apps.
+*   **Remote:**
+    *   Full remote control support (Up, Down, Left, Right, Select, Back, Home, Menu, etc.).
+*   **Notify:**
+    *   Send toast notifications to the TV screen.
 *   **Entities:**
-    *   **Buttons:** Reboot, Soft Reboot, Screen Off/On, Screensaver, Screenshot, TPC/GSR toggles.
-    *   **Numbers:** Backlight, Contrast, Brightness, Color, Sharpness, OLED Light.
+    *   **Buttons:**
+        *   Standard: Turn Screen Off/On, Screensaver, Screenshot.
+        *   *Advanced (Disabled by default):* Reboot, Soft Reboot, TPC/GSR toggles (OLED protection).
+    *   **Numbers:**
+        *   *Advanced (Disabled by default):* Backlight, Contrast, Brightness, Color, Sharpness, OLED Light.
     *   **Selects:** Picture Mode, Sound Output.
     *   **Sensors:** Current App, Volume, Power State, Software Info (Model, Version, Device ID).
     *   **Switches:** AI Picture Pro (experimental).
@@ -50,6 +57,51 @@ It is designed to "expose everything" possible from the library, including advan
 3.  Search for **LG WebOS TV (bscpylgtv)**.
 4.  Enter the IP address of your TV.
 5.  Follow the instructions to pair (accept the prompt on your TV).
+
+## Entities & Options
+
+### Dangerous/Advanced Options
+Some entities are **disabled by default** to prevent accidental changes that could affect picture quality or device stability. To enable them:
+1.  Go to the Device page for your TV in Home Assistant.
+2.  Click on "Entities" or the specific disabled entity.
+3.  Click the "Settings" (gear) icon.
+4.  Toggle "Enabled" and update.
+
+**Disabled Entities:**
+*   **Reboot / Soft Reboot:** Restarts the TV.
+*   **TPC / GSR:** Temporal Peak Luminance Control and Global Sticky Reduction. These are OLED protection mechanisms. Disabling them might void warranties or cause burn-in. Use with caution.
+*   **Picture Settings (Numbers):** Direct control over Backlight, Contrast, etc.
+
+## Services
+
+### `media_player.play_media`
+You can launch apps using standard media player calls:
+```yaml
+service: media_player.play_media
+target:
+  entity_id: media_player.lg_webos_tv
+data:
+  media_content_type: app
+  media_content_id: com.webos.app.youtube
+```
+
+### `bscpylgtv.command`
+Send raw commands to the library.
+```yaml
+service: bscpylgtv.command
+target:
+  entity_id: media_player.lg_webos_tv
+data:
+  command: system_info
+```
+
+### `notify.notify`
+Send a toast notification.
+```yaml
+service: notify.lg_webos_tv_notify
+data:
+  message: "Hello World!"
+```
 
 ## Credits
 
