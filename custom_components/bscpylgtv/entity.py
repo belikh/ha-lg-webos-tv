@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from homeassistant.helpers.entity import DeviceInfo, Entity
 from homeassistant.const import CONF_IP_ADDRESS
+from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
 from . import BscpylgtvConfigEntry, WebOsCoordinator
@@ -18,8 +19,19 @@ class BscpylgtvEntity(Entity):
         self._client = entry.runtime_data.client
         self._coordinator = entry.runtime_data.coordinator
 
+        # Try to find a unique ID (MAC address)
+        # device_id in software_info is often the MAC or UUID
+        device_unique_id = None
+        if self._client.software_info:
+             device_unique_id = self._client.software_info.get("device_id")
+
+        connections = set()
+        if device_unique_id and len(device_unique_id.split(":")) == 6:
+            connections.add((dr.CONNECTION_NETWORK_MAC, device_unique_id))
+
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.data[CONF_IP_ADDRESS])},
+            connections=connections,
             name=entry.title,
             manufacturer="LG Electronics",
             model=self._client.system_info.get("modelName") if self._client.system_info else "WebOS TV",

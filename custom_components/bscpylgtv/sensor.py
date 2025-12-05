@@ -8,7 +8,6 @@ from collections.abc import Callable
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
-    SensorDeviceClass,
     SensorStateClass,
 )
 from homeassistant.const import EntityCategory, PERCENTAGE
@@ -30,16 +29,12 @@ SENSORS: tuple[BscpylgtvSensorEntityDescription, ...] = (
     BscpylgtvSensorEntityDescription(
         key="current_app",
         translation_key="current_app",
-        value_fn=lambda client: client.current_appId, # Logic to resolve name is complex, handling in class
+        value_fn=lambda client: client.current_appId,
     ),
     BscpylgtvSensorEntityDescription(
         key="volume",
         translation_key="volume",
         native_unit_of_measurement=PERCENTAGE,
-        device_class=SensorDeviceClass.VOLUME_STORAGE, # deprecated but still used, or None? Actually VOLUME is not a class?
-        # SensorDeviceClass.VOLUME does not exist in some versions, usually None or POWER_FACTOR? No.
-        # Standard for volume is just Unit=%, no class usually, or Signal Strength.
-        # Actually in recent HA, VOLUME is not a class.
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda client: client.volume,
     ),
@@ -99,7 +94,6 @@ class BscpylgtvSensor(BscpylgtvEntity, SensorEntity):
     @property
     def native_value(self) -> str | int | float | None:
         """Return the state of the sensor."""
-        # Special case for Current App to resolve name
         if self.entity_description.key == "current_app":
             app_id = self._client.current_appId
             if not app_id:
