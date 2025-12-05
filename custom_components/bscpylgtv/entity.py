@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from homeassistant.helpers.entity import DeviceInfo, Entity
-from homeassistant.const import CONF_IP_ADDRESS
+from homeassistant.const import CONF_IP_ADDRESS, CONF_MAC
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
@@ -21,8 +21,8 @@ class BscpylgtvEntity(Entity):
 
         # Try to find a unique ID (MAC address)
         # device_id in software_info is often the MAC or UUID
-        device_unique_id = None
-        if self._client.software_info:
+        device_unique_id = entry.data.get(CONF_MAC)
+        if not device_unique_id and self._client.software_info:
              device_unique_id = self._client.software_info.get("device_id")
 
         connections = set()
@@ -37,6 +37,11 @@ class BscpylgtvEntity(Entity):
             model=self._client.system_info.get("modelName") if self._client.system_info else "WebOS TV",
             sw_version=self._client.software_info.get("major_ver") if self._client.software_info else None,
         )
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self._client.is_connected()
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""

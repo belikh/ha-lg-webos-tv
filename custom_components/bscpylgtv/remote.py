@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from homeassistant.components.remote import (
     RemoteEntity,
 )
+from homeassistant.const import CONF_MAC
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -31,6 +32,11 @@ class BscpylgtvRemote(BscpylgtvEntity, RemoteEntity):
         """Initialize the entity."""
         super().__init__(entry)
         self._attr_unique_id = f"{entry.entry_id}_remote"
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return super().available or (self._entry.data.get(CONF_MAC) is not None)
 
     @property
     def is_on(self) -> bool:
