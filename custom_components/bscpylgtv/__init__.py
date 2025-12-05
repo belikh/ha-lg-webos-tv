@@ -22,6 +22,8 @@ PLATFORMS: list[Platform] = [
     Platform.SELECT,
     Platform.NUMBER,
     Platform.SWITCH,
+    Platform.REMOTE,
+    Platform.NOTIFY,
 ]
 
 @dataclass
@@ -66,7 +68,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
     coordinator = WebOsCoordinator(hass, client)
     await client.register_state_update_callback(coordinator.async_on_state_update)
 
-    # Use runtime_data (modern HA approach)
     entry.runtime_data = BscpylgtvData(client=client, coordinator=coordinator)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

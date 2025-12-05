@@ -8,6 +8,7 @@ from homeassistant.components.number import (
     NumberEntity,
     NumberEntityDescription,
 )
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -29,6 +30,8 @@ NUMBERS: tuple[BscpylgtvNumberEntityDescription, ...] = (
         native_min_value=0,
         native_max_value=100,
         icon="mdi:brightness-5",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
     ),
     BscpylgtvNumberEntityDescription(
         key="contrast",
@@ -36,6 +39,8 @@ NUMBERS: tuple[BscpylgtvNumberEntityDescription, ...] = (
         native_min_value=0,
         native_max_value=100,
         icon="mdi:contrast",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
     ),
     BscpylgtvNumberEntityDescription(
         key="brightness",
@@ -43,6 +48,8 @@ NUMBERS: tuple[BscpylgtvNumberEntityDescription, ...] = (
         native_min_value=0,
         native_max_value=100,
         icon="mdi:brightness-6",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
     ),
     BscpylgtvNumberEntityDescription(
         key="color",
@@ -50,6 +57,8 @@ NUMBERS: tuple[BscpylgtvNumberEntityDescription, ...] = (
         native_min_value=0,
         native_max_value=100,
         icon="mdi:palette",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
     ),
     BscpylgtvNumberEntityDescription(
         key="sharpness",
@@ -57,6 +66,8 @@ NUMBERS: tuple[BscpylgtvNumberEntityDescription, ...] = (
         native_min_value=0,
         native_max_value=50,
         icon="mdi:sharpness",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
     ),
     BscpylgtvNumberEntityDescription(
         key="oled_light",
@@ -64,6 +75,8 @@ NUMBERS: tuple[BscpylgtvNumberEntityDescription, ...] = (
         native_min_value=0,
         native_max_value=100,
         icon="mdi:brightness-7",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
     ),
 )
 

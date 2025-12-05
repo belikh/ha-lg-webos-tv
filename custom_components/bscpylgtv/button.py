@@ -30,6 +30,7 @@ BUTTONS: tuple[BscpylgtvButtonEntityDescription, ...] = (
         translation_key="reboot",
         icon="mdi:restart",
         entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
         press_action=lambda client: client.reboot(),
     ),
     BscpylgtvButtonEntityDescription(
@@ -37,6 +38,7 @@ BUTTONS: tuple[BscpylgtvButtonEntityDescription, ...] = (
         translation_key="reboot_soft",
         icon="mdi:restart",
         entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
         press_action=lambda client: client.reboot_soft(),
     ),
     BscpylgtvButtonEntityDescription(
@@ -68,6 +70,7 @@ BUTTONS: tuple[BscpylgtvButtonEntityDescription, ...] = (
         translation_key="enable_tpc",
         icon="mdi:check",
         entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
         press_action=lambda client: client.enable_tpc_or_gsr("tpc", True),
     ),
     BscpylgtvButtonEntityDescription(
@@ -75,6 +78,7 @@ BUTTONS: tuple[BscpylgtvButtonEntityDescription, ...] = (
         translation_key="disable_tpc",
         icon="mdi:close",
         entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
         press_action=lambda client: client.enable_tpc_or_gsr("tpc", False),
     ),
     BscpylgtvButtonEntityDescription(
@@ -82,6 +86,7 @@ BUTTONS: tuple[BscpylgtvButtonEntityDescription, ...] = (
         translation_key="enable_gsr",
         icon="mdi:check",
         entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
         press_action=lambda client: client.enable_tpc_or_gsr("gsr", True),
     ),
     BscpylgtvButtonEntityDescription(
@@ -89,6 +94,7 @@ BUTTONS: tuple[BscpylgtvButtonEntityDescription, ...] = (
         translation_key="disable_gsr",
         icon="mdi:close",
         entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
         press_action=lambda client: client.enable_tpc_or_gsr("gsr", False),
     ),
 )
