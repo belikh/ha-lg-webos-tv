@@ -1,0 +1,94 @@
+# Service definitions
+launch_app:
+  name: Launch App
+  description: Launches an application by ID.
+  fields:
+    entity_id:
+      description: The media player entity.
+      name: Entity
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          integration: bscpylgtv
+    app_id:
+      description: The ID of the application (e.g., com.webos.app.youtube).
+      name: App ID
+      required: true
+      selector:
+        text:
+
+launch_app_with_params:
+  name: Launch App with Params
+  description: Launches an application with specific parameters.
+  fields:
+    entity_id:
+      description: The media player entity.
+      name: Entity
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          integration: bscpylgtv
+    app_id:
+      description: The ID of the application.
+      name: App ID
+      required: true
+      selector:
+        text:
+    params:
+      description: JSON parameters.
+      name: Parameters
+      required: true
+      selector:
+        object:
+
+command:
+  name: Send Command
+  description: Sends a generic command to the TV.
+  fields:
+    entity_id:
+      description: The media player entity.
+      name: Entity
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          integration: bscpylgtv
+    command:
+      description: The command to send (method name).
+      name: Command
+      required: true
+      selector:
+        text:
+    payload:
+      description: Arguments for the command (list or dict).
+      name: Payload
+      required: false
+      selector:
+        object:
+
+set_settings:
+  name: Set Settings
+  description: Set system or picture settings.
+  fields:
+    entity_id:
+      description: The media player entity.
+      name: Entity
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          integration: bscpylgtv
+    category:
+      description: The settings category (e.g., picture, other).
+      name: Category
+      required: true
+      selector:
+        text:
+    settings:
+      description: Dictionary of settings to set.
+      name: Settings
+      required: true
+      selector:
+        object:

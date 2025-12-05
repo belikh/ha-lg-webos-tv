@@ -1,0 +1,105 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to LG WebOS TV",
+        "description": "Enter the IP address of your LG WebOS TV.",
+        "data": {
+          "host": "IP Address",
+          "name": "Name"
+        }
+      },
+      "pairing": {
+        "title": "Pairing with TV",
+        "description": "Please accept the pairing request on your TV, then click Submit."
+      },
+      "ssdp": {
+        "title": "Discovered LG WebOS TV",
+        "description": "Do you want to set up {name} ({host})?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "pairing_failed": "Pairing failed or rejected",
+      "pairing_timeout": "Pairing timed out",
+      "no_host": "Could not determine host"
+    },
+    "abort": {
+      "already_configured": "Device is already configured",
+      "no_host": "Could not determine host"
+    }
+  },
+  "entity": {
+    "button": {
+      "reboot": {
+        "name": "Reboot"
+      },
+      "reboot_soft": {
+        "name": "Soft Reboot"
+      },
+      "turn_screen_off": {
+        "name": "Turn Screen Off"
+      },
+      "turn_screen_on": {
+        "name": "Turn Screen On"
+      },
+      "show_screen_saver": {
+        "name": "Start Screensaver"
+      },
+      "take_screenshot": {
+        "name": "Take Screenshot"
+      },
+      "enable_tpc_or_gsr_tpc_on": {
+        "name": "Enable TPC"
+      },
+      "enable_tpc_or_gsr_tpc_off": {
+        "name": "Disable TPC"
+      },
+      "enable_tpc_or_gsr_gsr_on": {
+        "name": "Enable GSR"
+      },
+      "enable_tpc_or_gsr_gsr_off": {
+        "name": "Disable GSR"
+      }
+    },
+    "select": {
+      "picture_mode": {
+        "name": "Picture Mode"
+      },
+      "sound_output": {
+        "name": "Sound Output"
+      }
+    },
+    "number": {
+      "backlight": {
+        "name": "Backlight"
+      },
+      "contrast": {
+        "name": "Contrast"
+      },
+      "brightness": {
+        "name": "Brightness"
+      },
+      "color": {
+        "name": "Color"
+      },
+      "sharpness": {
+        "name": "Sharpness"
+      },
+      "oled_light": {
+        "name": "OLED Light"
+      }
+    },
+    "sensor": {
+      "current_app": {
+        "name": "Current App"
+      },
+      "volume": {
+        "name": "Volume"
+      },
+      "power_state": {
+        "name": "Power State"
+      }
+    }
+  }
+}
