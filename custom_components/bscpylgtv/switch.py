@@ -2,64 +2,74 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
-from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_IP_ADDRESS, EntityCategory
+from homeassistant.components.switch import (
+    SwitchEntity,
+    SwitchEntityDescription,
+)
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from bscpylgtv import WebOsClient
-from .const import DOMAIN
+from . import BscpylgtvConfigEntry
+from .entity import BscpylgtvEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+@dataclass(frozen=True, kw_only=True)
+class BscpylgtvSwitchEntityDescription(SwitchEntityDescription):
+    """Describes LG WebOS TV switch entity."""
+    category: str
+    setting_key: str # Key in the settings dict
+
+# Only adding one example placeholder as "AI Picture" support varies greatly
+SWITCHES: tuple[BscpylgtvSwitchEntityDescription, ...] = (
+    # BscpylgtvSwitchEntityDescription(
+    #     key="ai_picture_pro",
+    #     translation_key="ai_picture_pro",
+    #     icon="mdi:auto-fix",
+    #     category="aiPicture",
+    #     setting_key="ai_Picture"
+    # ),
+)
+
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: BscpylgtvConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the LG WebOS TV switches."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
+    if not SWITCHES:
+        return
 
-    # Switches for specific boolean settings could be added here
-    # For now, I'll add a dummy switch or investigate what boolean settings are safe/useful.
-    # The user asked for "everything".
-    # There are settings like "ai_Picture" (AI Picture Pro) inside settings.
+    async_add_entities(
+        BscpylgtvSwitch(entry, description) for description in SWITCHES
+    )
 
-    entities = []
-    # Example: AI Picture Pro (if we can read it)
-    # entities.append(WebOsSettingSwitch(coordinator, entry, "ai_Picture", "AI Picture Pro", "aiPicture", "mdi:auto-fix"))
+class BscpylgtvSwitch(BscpylgtvEntity, SwitchEntity):
+    """Representation of an LG WebOS TV switch."""
 
-    async_add_entities(entities)
+    entity_description: BscpylgtvSwitchEntityDescription
 
-class WebOsSettingSwitch(SwitchEntity):
-    """Switch for a boolean setting."""
-
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, entry, key, name, category_name, icon):
-        self._coordinator = coordinator
-        self._client: WebOsClient = coordinator.client
-        self._key = key
-        self._attr_name = name
-        self._category = category_name
-        self._attr_icon = icon
-        self._attr_unique_id = f"{entry.data[CONF_IP_ADDRESS]}_switch_{key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.data[CONF_IP_ADDRESS])},
-            name=entry.title,
-        )
+    def __init__(
+        self, entry: BscpylgtvConfigEntry, description: BscpylgtvSwitchEntityDescription
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(entry)
+        self.entity_description = description
+        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
 
     @property
     def is_on(self) -> bool | None:
-        # Check settings
-        # This requires knowning where the setting lives.
+        """Return true if switch is on."""
+        # Reading settings is not always straightforward as we need to know where to look in 'client'
         return None
 
     async def async_turn_on(self, **kwargs) -> None:
-        payload = {self._key: "on"} # or true
-        await self._client.set_settings(self._category, payload)
+        """Turn the switch on."""
+        payload = {self.entity_description.setting_key: "on"}
+        await self._client.set_settings(self.entity_description.category, payload)
 
     async def async_turn_off(self, **kwargs) -> None:
-        payload = {self._key: "off"} # or false
-        await self._client.set_settings(self._category, payload)
+        """Turn the switch off."""
+        payload = {self.entity_description.setting_key: "off"}
+        await self._client.set_settings(self.entity_description.category, payload)

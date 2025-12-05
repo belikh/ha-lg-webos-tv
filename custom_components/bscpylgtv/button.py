@@ -2,83 +2,118 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from typing import Callable, Awaitable
 
-from homeassistant.components.button import ButtonEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_IP_ADDRESS, EntityCategory
+from homeassistant.components.button import (
+    ButtonEntity,
+    ButtonEntityDescription,
+)
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from bscpylgtv import WebOsClient
-from .const import DOMAIN
+from . import BscpylgtvConfigEntry
+from .entity import BscpylgtvEntity
 
 _LOGGER = logging.getLogger(__name__)
 
-BUTTON_TYPES = [
-    ("reboot", "Reboot", "mdi:restart", EntityCategory.CONFIG),
-    ("reboot_soft", "Soft Reboot", "mdi:restart", EntityCategory.CONFIG),
-    ("turn_screen_off", "Turn Screen Off", "mdi:television-off", None),
-    ("turn_screen_on", "Turn Screen On", "mdi:television", None),
-    ("show_screen_saver", "Screensaver", "mdi:image", None),
-    ("take_screenshot", "Take Screenshot", "mdi:camera", None),
-    ("enable_tpc_or_gsr_tpc_on", "Enable TPC", "mdi:check", EntityCategory.CONFIG),
-    ("enable_tpc_or_gsr_tpc_off", "Disable TPC", "mdi:close", EntityCategory.CONFIG),
-    ("enable_tpc_or_gsr_gsr_on", "Enable GSR", "mdi:check", EntityCategory.CONFIG),
-    ("enable_tpc_or_gsr_gsr_off", "Disable GSR", "mdi:close", EntityCategory.CONFIG),
-]
+@dataclass(frozen=True, kw_only=True)
+class BscpylgtvButtonEntityDescription(ButtonEntityDescription):
+    """Describes LG WebOS TV button entity."""
+    press_action: Callable[[WebOsClient], Awaitable[None]]
+
+BUTTONS: tuple[BscpylgtvButtonEntityDescription, ...] = (
+    BscpylgtvButtonEntityDescription(
+        key="reboot",
+        translation_key="reboot",
+        icon="mdi:restart",
+        entity_category=EntityCategory.CONFIG,
+        press_action=lambda client: client.reboot(),
+    ),
+    BscpylgtvButtonEntityDescription(
+        key="reboot_soft",
+        translation_key="reboot_soft",
+        icon="mdi:restart",
+        entity_category=EntityCategory.CONFIG,
+        press_action=lambda client: client.reboot_soft(),
+    ),
+    BscpylgtvButtonEntityDescription(
+        key="turn_screen_off",
+        translation_key="turn_screen_off",
+        icon="mdi:television-off",
+        press_action=lambda client: client.turn_screen_off(),
+    ),
+    BscpylgtvButtonEntityDescription(
+        key="turn_screen_on",
+        translation_key="turn_screen_on",
+        icon="mdi:television",
+        press_action=lambda client: client.turn_screen_on(),
+    ),
+    BscpylgtvButtonEntityDescription(
+        key="show_screen_saver",
+        translation_key="show_screen_saver",
+        icon="mdi:image",
+        press_action=lambda client: client.show_screen_saver(),
+    ),
+    BscpylgtvButtonEntityDescription(
+        key="take_screenshot",
+        translation_key="take_screenshot",
+        icon="mdi:camera",
+        press_action=lambda client: client.take_screenshot(),
+    ),
+    BscpylgtvButtonEntityDescription(
+        key="enable_tpc",
+        translation_key="enable_tpc",
+        icon="mdi:check",
+        entity_category=EntityCategory.CONFIG,
+        press_action=lambda client: client.enable_tpc_or_gsr("tpc", True),
+    ),
+    BscpylgtvButtonEntityDescription(
+        key="disable_tpc",
+        translation_key="disable_tpc",
+        icon="mdi:close",
+        entity_category=EntityCategory.CONFIG,
+        press_action=lambda client: client.enable_tpc_or_gsr("tpc", False),
+    ),
+    BscpylgtvButtonEntityDescription(
+        key="enable_gsr",
+        translation_key="enable_gsr",
+        icon="mdi:check",
+        entity_category=EntityCategory.CONFIG,
+        press_action=lambda client: client.enable_tpc_or_gsr("gsr", True),
+    ),
+    BscpylgtvButtonEntityDescription(
+        key="disable_gsr",
+        translation_key="disable_gsr",
+        icon="mdi:close",
+        entity_category=EntityCategory.CONFIG,
+        press_action=lambda client: client.enable_tpc_or_gsr("gsr", False),
+    ),
+)
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: BscpylgtvConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the LG WebOS TV buttons."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    entities = []
+    async_add_entities(
+        BscpylgtvButton(entry, description) for description in BUTTONS
+    )
 
-    for key, name, icon, category in BUTTON_TYPES:
-        entities.append(BscpylgtvButton(coordinator, entry, key, name, icon, category))
-
-    async_add_entities(entities)
-
-
-class BscpylgtvButton(ButtonEntity):
+class BscpylgtvButton(BscpylgtvEntity, ButtonEntity):
     """Representation of an LG WebOS TV button."""
 
-    _attr_has_entity_name = True
+    entity_description: BscpylgtvButtonEntityDescription
 
-    def __init__(self, coordinator, entry, key, name, icon, category):
+    def __init__(
+        self, entry: BscpylgtvConfigEntry, description: BscpylgtvButtonEntityDescription
+    ) -> None:
         """Initialize the entity."""
-        self._coordinator = coordinator
-        self._client: WebOsClient = coordinator.client
-        self._key = key
-        self._attr_name = name
-        self._attr_icon = icon
-        self._attr_entity_category = category
-        self._attr_unique_id = f"{entry.data[CONF_IP_ADDRESS]}_button_{key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.data[CONF_IP_ADDRESS])},
-            name=entry.title,
-        )
+        super().__init__(entry)
+        self.entity_description = description
+        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
 
     async def async_press(self) -> None:
         """Handle the button press."""
-        if self._key == "reboot":
-            await self._client.reboot()
-        elif self._key == "reboot_soft":
-            await self._client.reboot_soft()
-        elif self._key == "turn_screen_off":
-            await self._client.turn_screen_off()
-        elif self._key == "turn_screen_on":
-            await self._client.turn_screen_on()
-        elif self._key == "show_screen_saver":
-            await self._client.show_screen_saver()
-        elif self._key == "take_screenshot":
-            await self._client.take_screenshot()
-        elif self._key == "enable_tpc_or_gsr_tpc_on":
-            await self._client.enable_tpc_or_gsr("tpc", True)
-        elif self._key == "enable_tpc_or_gsr_tpc_off":
-            await self._client.enable_tpc_or_gsr("tpc", False)
-        elif self._key == "enable_tpc_or_gsr_gsr_on":
-            await self._client.enable_tpc_or_gsr("gsr", True)
-        elif self._key == "enable_tpc_or_gsr_gsr_off":
-            await self._client.enable_tpc_or_gsr("gsr", False)
+        await self.entity_description.press_action(self._client)

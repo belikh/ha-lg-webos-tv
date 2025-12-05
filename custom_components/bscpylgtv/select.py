@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from collections.abc import Callable, Awaitable
 
-from homeassistant.components.select import SelectEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_IP_ADDRESS, EntityCategory
+from homeassistant.components.select import (
+    SelectEntity,
+    SelectEntityDescription,
+)
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from bscpylgtv import WebOsClient
-from .const import DOMAIN
+from . import BscpylgtvConfigEntry
+from .entity import BscpylgtvEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,99 +25,62 @@ PICTURE_MODES = [
     "eco", "standard", "vivid", "sports", "aps"
 ]
 
-# Sound Output options (might vary by TV, but we can list common ones or discover)
+# Common sound outputs
 SOUND_OUTPUTS = [
     "tv_speaker", "external_arc", "external_optical", "lineout", "headphone", "bt_soundbar", "wisa_speaker"
 ]
 
+@dataclass(frozen=True, kw_only=True)
+class BscpylgtvSelectEntityDescription(SelectEntityDescription):
+    """Describes LG WebOS TV select entity."""
+    current_fn: Callable[[WebOsClient], str | None]
+    select_fn: Callable[[WebOsClient, str], Awaitable[None]]
+
+SELECTS: tuple[BscpylgtvSelectEntityDescription, ...] = (
+    BscpylgtvSelectEntityDescription(
+        key="picture_mode",
+        translation_key="picture_mode",
+        icon="mdi:image",
+        options=PICTURE_MODES,
+        current_fn=lambda client: None, # Reading current mode is unreliable/not directly exposed
+        select_fn=lambda client, option: client.set_current_picture_mode(option),
+    ),
+    BscpylgtvSelectEntityDescription(
+        key="sound_output",
+        translation_key="sound_output",
+        icon="mdi:speaker",
+        options=SOUND_OUTPUTS,
+        current_fn=lambda client: client.sound_output,
+        select_fn=lambda client, option: client.change_sound_output(option),
+    ),
+)
+
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: BscpylgtvConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the LG WebOS TV selects."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities(
+        BscpylgtvSelect(entry, description) for description in SELECTS
+    )
 
-    async_add_entities([
-        WebOsPictureModeSelect(coordinator, entry),
-        WebOsSoundOutputSelect(coordinator, entry),
-    ])
+class BscpylgtvSelect(BscpylgtvEntity, SelectEntity):
+    """Representation of an LG WebOS TV select."""
 
+    entity_description: BscpylgtvSelectEntityDescription
 
-class WebOsSelect(SelectEntity):
-    """Base select."""
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, entry):
-        self._coordinator = coordinator
-        self._client: WebOsClient = coordinator.client
-        self._entry = entry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.data[CONF_IP_ADDRESS])},
-            name=entry.title,
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Register callbacks."""
-        self.async_on_remove(self._coordinator.async_add_listener(self.async_write_ha_state))
-
-
-class WebOsPictureModeSelect(WebOsSelect):
-    """Select for picture mode."""
-
-    _attr_name = "Picture Mode"
-    _attr_options = PICTURE_MODES
-    _attr_icon = "mdi:image"
-
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.data[CONF_IP_ADDRESS]}_picture_mode"
+    def __init__(
+        self, entry: BscpylgtvConfigEntry, description: BscpylgtvSelectEntityDescription
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(entry)
+        self.entity_description = description
+        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
 
     @property
     def current_option(self) -> str | None:
-        # Check settings for current picture mode
-        # The library does not always expose "current picture mode" directly in a simple property
-        # but it might be in 'picture_settings' or we can derive it?
-        # Inspecting library: 'set_current_picture_mode' exists.
-        # But 'get_current_picture_mode'? Not explicitly in the list I saw.
-        # However, it might be part of 'picture_settings' or 'system_info'.
-        # Let's check `client.picture_settings` again.
-
-        # Actually, usually getting the current picture mode is tricky on WebOS.
-        # bscpylgtv might not expose it easily as a state.
-        # But let's assume if we set it, we might know it? No.
-
-        # If I look at the README:
-        # bscpylgtvcommand 192.168.1.18 launch_app_with_params com.palm.app.settings "{\"target\": \"PictureMode\"}"
-
-        # In the absence of a reliable read method, this select might be optimistic or read-only if we can't read it.
-        # But wait, `bscpylgtv` has `set_current_picture_mode`.
-        # Does it have `get_picture_settings`? Yes.
-        # `picture_settings` property returns a dict.
-        # Maybe it has a "pictureMode" key?
-        settings = self._client.picture_settings
-        if settings:
-            # Usually it returns the settings FOR the current mode, but maybe not the mode name itself.
-            pass
-
-        return None # Return None if unknown
+        """Return the selected entity option to represent the entity state."""
+        return self.entity_description.current_fn(self._client)
 
     async def async_select_option(self, option: str) -> None:
-        await self._client.set_current_picture_mode(option)
-
-
-class WebOsSoundOutputSelect(WebOsSelect):
-    """Select for sound output."""
-
-    _attr_name = "Sound Output"
-    _attr_options = SOUND_OUTPUTS
-    _attr_icon = "mdi:speaker"
-
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.data[CONF_IP_ADDRESS]}_sound_output"
-
-    @property
-    def current_option(self) -> str | None:
-        return self._client.sound_output
-
-    async def async_select_option(self, option: str) -> None:
-        await self._client.change_sound_output(option)
+        """Change the selected option."""
+        await self.entity_description.select_fn(self._client, option)

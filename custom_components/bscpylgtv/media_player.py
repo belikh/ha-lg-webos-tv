@@ -10,27 +10,25 @@ from homeassistant.components.media_player import (
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
     MediaPlayerState,
-    MediaType
+    MediaType,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_IP_ADDRESS
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get_current_platform
 
 from bscpylgtv import WebOsClient
-from .const import DOMAIN, DEFAULT_NAME
+from . import BscpylgtvConfigEntry
+from .entity import BscpylgtvEntity
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: BscpylgtvConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the LG WebOS TV media player."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    entity = BscpylgtvMediaPlayer(coordinator, entry)
-    async_add_entities([entity])
+    async_add_entities([BscpylgtvMediaPlayer(entry)])
 
     # Register services
     platform = async_get_current_platform()
@@ -69,30 +67,16 @@ async def async_setup_entry(
     )
 
 
-class BscpylgtvMediaPlayer(MediaPlayerEntity):
+class BscpylgtvMediaPlayer(BscpylgtvEntity, MediaPlayerEntity):
     """Representation of an LG WebOS TV media player."""
 
     _attr_device_class = MediaPlayerDeviceClass.TV
-    _attr_has_entity_name = True
-    _attr_name = None  # Use device name
+    _attr_name = None  # Use device name from device_info
 
-    def __init__(self, coordinator, entry):
+    def __init__(self, entry: BscpylgtvConfigEntry) -> None:
         """Initialize the entity."""
-        self._coordinator = coordinator
-        self._client: WebOsClient = coordinator.client
-        self._entry = entry
+        super().__init__(entry)
         self._attr_unique_id = entry.data[CONF_IP_ADDRESS]
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.data[CONF_IP_ADDRESS])},
-            name=entry.title,
-            manufacturer="LG Electronics",
-            model=self._client.system_info.get("modelName") if self._client.system_info else "WebOS TV",
-            sw_version=self._client.software_info.get("major_ver") if self._client.software_info else None,
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Register callbacks."""
-        self.async_on_remove(self._coordinator.async_add_listener(self.async_write_ha_state))
 
     @property
     def state(self) -> MediaPlayerState | None:
@@ -155,7 +139,7 @@ class BscpylgtvMediaPlayer(MediaPlayerEntity):
     @property
     def supported_features(self) -> MediaPlayerEntityFeature:
         """Flag media player features that are supported."""
-        features = (
+        return (
             MediaPlayerEntityFeature.TURN_OFF
             | MediaPlayerEntityFeature.VOLUME_SET
             | MediaPlayerEntityFeature.VOLUME_STEP
@@ -169,7 +153,6 @@ class BscpylgtvMediaPlayer(MediaPlayerEntity):
             | MediaPlayerEntityFeature.TURN_ON
             | MediaPlayerEntityFeature.PLAY_MEDIA
         )
-        return features
 
     async def async_turn_on(self) -> None:
         """Turn the media player on."""
@@ -229,10 +212,8 @@ class BscpylgtvMediaPlayer(MediaPlayerEntity):
 
     async def async_play_media(self, media_type: MediaType | str, media_id: str, **kwargs: Any) -> None:
         """Play a piece of media."""
-        # Support launching apps via play_media if media_type is APP
         if media_type == MediaType.APP or media_type == "app":
             await self._client.launch_app(media_id)
-        # TODO: Support channels or URLs?
 
     # Service handlers
     async def async_launch_app(self, app_id: str) -> None:
@@ -245,18 +226,13 @@ class BscpylgtvMediaPlayer(MediaPlayerEntity):
 
     async def async_command(self, command: str, payload: Any = None) -> None:
         """Send generic command."""
-        # bscpylgtv doesn't have a single "send generic command" method that takes a string name easily
-        # except maybe getattr(client, command)(*payload)?
-        # Or `request`?
-
-        # Security/Stability Check: user can call any method on client.
         if not hasattr(self._client, command):
-            _LOGGER.error(f"Command {command} not found on WebOsClient")
+            _LOGGER.error("Command %s not found on WebOsClient", command)
             return
 
         method = getattr(self._client, command)
         if not callable(method):
-            _LOGGER.error(f"Attribute {command} is not callable")
+            _LOGGER.error("Attribute %s is not callable", command)
             return
 
         if payload is not None:

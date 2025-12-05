@@ -49,16 +49,16 @@
       "take_screenshot": {
         "name": "Take Screenshot"
       },
-      "enable_tpc_or_gsr_tpc_on": {
+      "enable_tpc": {
         "name": "Enable TPC"
       },
-      "enable_tpc_or_gsr_tpc_off": {
+      "disable_tpc": {
         "name": "Disable TPC"
       },
-      "enable_tpc_or_gsr_gsr_on": {
+      "enable_gsr": {
         "name": "Enable GSR"
       },
-      "enable_tpc_or_gsr_gsr_off": {
+      "disable_gsr": {
         "name": "Disable GSR"
       }
     },
@@ -99,6 +99,23 @@
       },
       "power_state": {
         "name": "Power State"
+      },
+      "model_name": {
+        "name": "Model Name"
+      },
+      "major_ver": {
+        "name": "Software Major Version"
+      },
+      "minor_ver": {
+        "name": "Software Minor Version"
+      },
+      "device_id": {
+        "name": "Device ID"
+      }
+    },
+    "switch": {
+      "ai_picture_pro": {
+        "name": "AI Picture Pro"
       }
     }
   }
