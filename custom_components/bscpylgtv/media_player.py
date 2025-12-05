@@ -80,6 +80,11 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, MediaPlayerEntity):
         self._attr_unique_id = entry.data[CONF_IP_ADDRESS]
 
     @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return super().available or (self._entry.data.get(CONF_MAC) is not None)
+
+    @property
     def state(self) -> MediaPlayerState | None:
         """Return the state of the device."""
         power_state = self._client.power_state

@@ -38,6 +38,11 @@ class BscpylgtvEntity(Entity):
             sw_version=self._client.software_info.get("major_ver") if self._client.software_info else None,
         )
 
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self._client.is_connected()
+
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
         self.async_on_remove(self._coordinator.async_add_listener(self.async_write_ha_state))
