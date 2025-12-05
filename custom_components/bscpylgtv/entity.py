@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from homeassistant.helpers.entity import DeviceInfo, Entity
-from homeassistant.const import CONF_IP_ADDRESS
+from homeassistant.const import CONF_IP_ADDRESS, CONF_MAC
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
@@ -21,8 +21,8 @@ class BscpylgtvEntity(Entity):
 
         # Try to find a unique ID (MAC address)
         # device_id in software_info is often the MAC or UUID
-        device_unique_id = None
-        if self._client.software_info:
+        device_unique_id = entry.data.get(CONF_MAC)
+        if not device_unique_id and self._client.software_info:
              device_unique_id = self._client.software_info.get("device_id")
 
         connections = set()

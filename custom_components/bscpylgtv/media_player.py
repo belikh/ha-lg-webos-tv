@@ -12,7 +12,8 @@ from homeassistant.components.media_player import (
     MediaPlayerState,
     MediaType,
 )
-from homeassistant.const import CONF_IP_ADDRESS
+from homeassistant.components import wake_on_lan
+from homeassistant.const import CONF_IP_ADDRESS, CONF_MAC
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get_current_platform
@@ -156,6 +157,10 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, MediaPlayerEntity):
 
     async def async_turn_on(self) -> None:
         """Turn the media player on."""
+        if mac := self._entry.data.get(CONF_MAC):
+            await self.hass.async_add_executor_job(
+                wake_on_lan.send_magic_packet, mac
+            )
         await self._client.power_on()
 
     async def async_turn_off(self) -> None:

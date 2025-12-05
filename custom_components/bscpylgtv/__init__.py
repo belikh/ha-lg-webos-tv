@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_IP_ADDRESS, Platform
+from homeassistant.const import CONF_IP_ADDRESS, CONF_MAC, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
@@ -63,7 +63,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
     try:
         await client.connect()
     except Exception as ex:
-        raise ConfigEntryNotReady(f"Unable to connect to {host}: {ex}") from ex
+        _LOGGER.warning("Unable to connect to %s: %s", host, ex)
+
+    if client.is_connected() and not entry.data.get(CONF_MAC):
+        if client.software_info and "device_id" in client.software_info:
+            mac = client.software_info["device_id"]
+            if len(mac.split(":")) == 6:
+                hass.config_entries.async_update_entry(
+                    entry, data={**entry.data, CONF_MAC: mac}
+                )
 
     coordinator = WebOsCoordinator(hass, client)
     await client.register_state_update_callback(coordinator.async_on_state_update)

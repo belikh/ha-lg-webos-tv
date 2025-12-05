@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_IP_ADDRESS
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_IP_ADDRESS, CONF_MAC
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.components import ssdp
@@ -101,13 +101,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         await self.async_set_unique_id(device_uuid)
                         self._abort_if_unique_id_configured()
 
-                    return self.async_create_entry(
-                        title=self._name,
-                        data={
-                            CONF_IP_ADDRESS: self._host,
-                            CONF_KEY_FILE: self._key_file_path
-                        },
-                    )
+                    data = {
+                        CONF_IP_ADDRESS: self._host,
+                        CONF_KEY_FILE: self._key_file_path,
+                    }
+
+                    # Try to get MAC from software info or hello info if available
+                    # Note: device_id in software_info is often the MAC
+                    if self._client.software_info and "device_id" in self._client.software_info:
+                        mac = self._client.software_info["device_id"]
+                        if len(mac.split(":")) == 6:
+                            data[CONF_MAC] = mac
+
+                    return self.async_create_entry(title=self._name, data=data)
                 else:
                     errors["base"] = "pairing_failed"
                     await self._client.disconnect()
