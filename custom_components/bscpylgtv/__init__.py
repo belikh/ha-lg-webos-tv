@@ -65,7 +65,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
     )
 
     try:
-        await client.connect()
+        await asyncio.wait_for(client.connect(), timeout=10)
+    except asyncio.TimeoutError:
+        _LOGGER.warning("Timed out while trying to connect to %s", host)
     except Exception as ex:
         _LOGGER.warning("Unable to connect to %s: %s", host, ex)
 

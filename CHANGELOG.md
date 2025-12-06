@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.4
+
+### Changes
+
+*   **Fix:** Added timeout to connection attempts during setup to prevent infinite hanging if pairing fails or is pending.
+
 ## v1.0.1
 
 ### Changes
