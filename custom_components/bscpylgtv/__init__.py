@@ -50,14 +50,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
         "apps",
         "inputs",
         "sound_output",
-        "picture_settings"
+        "picture_settings",
+        "channels",
+        "current_channel",
+        "channel_info",
     ]
 
     client = await WebOsClient.create(
         host,
         key_file_path=key_file_path,
         ping_interval=DEFAULT_PING_INTERVAL,
-        states=states
+        states=states,
+        get_hello_info=True,
     )
 
     try:
