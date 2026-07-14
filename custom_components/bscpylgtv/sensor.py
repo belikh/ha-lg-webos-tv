@@ -98,9 +98,10 @@ class BscpylgtvSensor(BscpylgtvEntity, SensorEntity):
             app_id = self._client.current_appId
             if not app_id:
                 return None
-            for app in self._client.apps:
-                if app.get("id") == app_id:
-                    return app.get("title")
+            # client.apps is a dict keyed by app id
+            app = self._client.apps.get(app_id)
+            if isinstance(app, dict):
+                return app.get("title") or app_id
             return app_id
 
         return self.entity_description.value_fn(self._client)

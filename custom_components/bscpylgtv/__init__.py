@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from functools import partial
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_IP_ADDRESS, CONF_MAC, Platform
@@ -56,13 +57,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
         "channel_info",
     ]
 
-    client = await WebOsClient.create(
-        host,
-        key_file_path=key_file_path,
-        ping_interval=DEFAULT_PING_INTERVAL,
-        states=states,
-        get_hello_info=True,
+    # The constructor creates an SSL context (blocking I/O), run it in an executor
+    client = await hass.async_add_executor_job(
+        partial(
+            WebOsClient,
+            host,
+            key_file_path=key_file_path,
+            ping_interval=DEFAULT_PING_INTERVAL,
+            states=states,
+            get_hello_info=True,
+        )
     )
+    await client.async_init()
 
     try:
         await asyncio.wait_for(client.connect(), timeout=10)
@@ -110,8 +116,13 @@ class WebOsCoordinator:
 
     async def async_on_state_update(self, client):
         """Called when the client receives a state update."""
+        # Never let a listener exception propagate back into the client's
+        # subscription handler task, it would kill the subscription for good.
         for callback in self._listeners:
-            if asyncio.iscoroutinefunction(callback):
-                await callback()
-            else:
-                callback()
+            try:
+                if asyncio.iscoroutinefunction(callback):
+                    await callback()
+                else:
+                    callback()
+            except Exception:
+                _LOGGER.exception("Error in state update listener")
