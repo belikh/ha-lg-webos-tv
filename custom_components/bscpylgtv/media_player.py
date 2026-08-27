@@ -118,13 +118,14 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, MediaPlayerEntity):
         if not current_app_id:
             return None
 
-        for inp in self._client.inputs:
-            if inp.get("appId") == current_app_id:
-                return inp.get("label")
+        # client.inputs is a dict keyed by appId, client.apps by app id
+        inp = self._client.inputs.get(current_app_id)
+        if isinstance(inp, dict):
+            return inp.get("label")
 
-        for app in self._client.apps:
-            if app.get("id") == current_app_id:
-                return app.get("title")
+        app = self._client.apps.get(current_app_id)
+        if isinstance(app, dict):
+            return app.get("title")
 
         return current_app_id
 
@@ -132,11 +133,11 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, MediaPlayerEntity):
     def source_list(self) -> list[str] | None:
         """List of available input sources."""
         sources = []
-        for inp in self._client.inputs:
+        for inp in self._client.inputs.values():
             label = inp.get("label")
             if label:
                 sources.append(label)
-        for app in self._client.apps:
+        for app in self._client.apps.values():
             title = app.get("title")
             if title:
                 sources.append(title)
@@ -190,12 +191,12 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, MediaPlayerEntity):
 
     async def async_select_source(self, source: str) -> None:
         """Select input source."""
-        for inp in self._client.inputs:
+        for inp in self._client.inputs.values():
             if inp.get("label") == source:
                 await self._client.set_input(inp.get("id"))
                 return
 
-        for app in self._client.apps:
+        for app in self._client.apps.values():
             if app.get("title") == source:
                 await self._client.launch_app(app.get("id"))
                 return
