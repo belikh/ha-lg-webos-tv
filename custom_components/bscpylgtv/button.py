@@ -9,17 +9,13 @@ methods are author-documented as non-functional on modern webOS).
 
 from __future__ import annotations
 
-import base64
-from pathlib import Path
 from typing import override
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN
 from .coordinator import BscpylgtvConfigEntry
 from .entity import BscpylgtvEntity, cmd
 
@@ -36,12 +32,6 @@ BUTTONS: tuple[ButtonEntityDescription, ...] = (
         entity_registry_enabled_default=False,
     ),
 )
-
-
-def _write_screenshot(path: Path, data: bytes) -> None:
-    """Write screenshot bytes to ``path`` (executor job; parents created)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
 
 
 async def async_setup_entry(
@@ -83,26 +73,12 @@ class BscpylgtvButton(BscpylgtvEntity, ButtonEntity):
     async def _async_write_screenshot(self) -> None:
         """Capture a screenshot and write it under ``config/www`` (AD-11).
 
-        The payload of ``take_screenshot()`` carries a base64-encoded
-        960x540 JPG in ``image``. The write happens locally: failures are
-        raised as the dedicated ``screenshot_write_failed`` error rather
-        than letting the ``cmd`` wrapper misread an ``OSError`` as a
-        communication failure. Duplicated from the media_player screenshot
-        mixin on purpose: Cluster C lands in parallel, so this button
-        keeps a local implementation to avoid a cross-cluster import.
+        Delegates to the coordinator's shared implementation (payload
+        shapes vary by model — base64 ``image`` on older sets, an
+        ``imageUri`` resource on current webOS). Write failures surface
+        as the dedicated ``screenshot_write_failed`` error from the
+        coordinator rather than a raw ``OSError``.
         """
-        payload = await self.client.take_screenshot()
-        data = base64.b64decode(payload["image"])
-        path = Path(
+        await self.coordinator.async_take_screenshot(
             self.hass.config.path("www", f"bscpylgtv_{self._entry.unique_id}.jpg")
         )
-        try:
-            await self.hass.async_add_executor_job(_write_screenshot, path, data)
-        except (OSError, KeyError, ValueError) as ex:
-            # KeyError/ValueError cover a missing ``image`` field and
-            # malformed base64 from unexpected TV responses.
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="screenshot_write_failed",
-                translation_placeholders={"path": str(path)},
-            ) from ex

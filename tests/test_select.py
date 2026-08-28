@@ -117,6 +117,26 @@ async def test_picture_mode_select_option(integration: Any) -> None:
     assert hass.states.get(SELECTS["picture_mode"]).state == "cinema"
 
 
+async def test_picture_mode_restores_after_reload(integration: Any) -> None:
+    """The last written mode survives a reload (RestoreEntity).
+
+    Regression: models that refuse every pictureMode read (verified on a
+    CX OLED) kept falling back to unknown after every HA restart, even
+    after the user had set a mode from HA.
+    """
+    hass = integration.coordinator.hass
+    entry = integration.entry
+    await _select(hass, SELECTS["picture_mode"], "cinema")
+    assert hass.states.get(SELECTS["picture_mode"]).state == "cinema"
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    await hass.async_block_till_done()
+    state = hass.states.get(SELECTS["picture_mode"])
+    assert state is not None
+    assert state.state == "cinema", "restored value lost after reload"
+
+
 async def test_picture_mode_pushed_current_wins(integration: Any) -> None:
     """A subscription push (if any) overrides the cached current."""
     hass = integration.coordinator.hass

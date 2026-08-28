@@ -10,13 +10,11 @@ source list from the client's ``apps``/``inputs`` dicts, channel
 from __future__ import annotations
 
 import asyncio
-import base64
 import re
 import socket
 from contextlib import suppress
 from http import HTTPStatus
-from pathlib import Path
-from typing import Any, override
+from typing import Any, cast, override
 
 from homeassistant.components.media_player import (
     MediaPlayerDeviceClass,
@@ -589,50 +587,14 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, RestoreEntity, MediaPlayerEntity):
     ) -> ServiceResponse:
         """Take a screenshot (AD-11).
 
-        Returns ``{"image": <base64 jpg>}``; when ``filename`` is given
-        the decoded JPEG is written there via the executor (relative
-        paths resolve against the config directory). The screenshot
-        button (Cluster D) reuses this method with a ``www`` target.
+        Delegates to the coordinator's shared implementation, which
+        handles every known payload shape (base64 ``image`` on older
+        sets, an ``imageUri`` resource on current webOS) and optional
+        file writes. Returns ``{"image": <base64 jpg>}``.
         """
-        payload = await self.client.take_screenshot()
-        image = payload.get("image") if isinstance(payload, dict) else None
-        if not isinstance(image, str) or not image:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="communication_error",
-                translation_placeholders={
-                    "name": self.coordinator.name,
-                    "func": "async_take_screenshot",
-                    "error": "no image data in screenshot payload",
-                },
-            )
-        if filename is not None:
-            try:
-                await self.hass.async_add_executor_job(
-                    self._write_screenshot_file,
-                    self.hass.config.config_dir,
-                    filename,
-                    image,
-                )
-            except (OSError, ValueError) as err:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="screenshot_write_failed",
-                    translation_placeholders={
-                        "filename": filename,
-                        "error": str(err),
-                    },
-                ) from err
-        return {"image": image}
-
-    @staticmethod
-    def _write_screenshot_file(config_dir: str, filename: str, image_b64: str) -> None:
-        """Write a base64 JPEG to disk (executor only; blocking I/O)."""
-        path = Path(filename)
-        if not path.is_absolute():
-            path = Path(config_dir) / path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(base64.b64decode(image_b64))
+        return cast(
+            ServiceResponse, await self.coordinator.async_take_screenshot(filename)
+        )
 
     @cmd
     async def async_set_settings(self, category: str, settings: dict[str, Any]) -> None:

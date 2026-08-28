@@ -18,7 +18,7 @@ MANIFEST: dict[str, Any] = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")
 
 def test_domain_and_version() -> None:
     assert MANIFEST["domain"] == "bscpylgtv"
-    assert MANIFEST["version"] == "2.0.0"
+    assert MANIFEST["version"] == "2.0.1"
     assert MANIFEST["name"] == "LG WebOS TV (bscpylgtv)"
 
 

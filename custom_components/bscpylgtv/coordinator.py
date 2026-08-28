@@ -18,13 +18,17 @@ and replaced.
 from __future__ import annotations
 
 import asyncio
+import base64
 import functools
 import re
+from pathlib import Path
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -283,5 +287,88 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
                 except BSCP_CONNECTION_EXCEPTIONS:
                     LOGGER.debug("Recovery reconnect failed; retry will fail")
 
+    async def async_take_screenshot(
+        self, filename: str | None = None
+    ) -> dict[str, str]:
+        """Capture a screenshot; returns ``{"image": <base64 jpg>}``.
+
+        Payload shapes vary by model/firmware: base64 JPEG under
+        ``image`` (older sets), or an ``imageUri`` that is either a
+        ``data:`` URI or an ``https://`` resource on the TV's
+        self-signed certificate (verified on a CX OLED48CXPTA, webOS
+        04.40.16 — no ``image`` key at all). ``filename`` writes the
+        decoded JPEG via the executor (relative paths resolve against
+        the config directory).
+        """
+        payload = await self.client.take_screenshot()
+        image = await self._async_screenshot_image(payload)
+        if filename is not None:
+            try:
+                await self.hass.async_add_executor_job(
+                    _write_screenshot_file,
+                    self.hass.config.config_dir,
+                    filename,
+                    image,
+                )
+            except OSError as err:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="screenshot_write_failed",
+                    translation_placeholders={
+                        "filename": filename,
+                        "error": str(err),
+                    },
+                ) from err
+        return {"image": base64.b64encode(image).decode("ascii")}
+
+    async def _async_screenshot_image(self, payload: Any) -> bytes:
+        """Extract JPEG bytes from any known screenshot payload shape."""
+        if isinstance(payload, dict):
+            b64 = payload.get("image")
+            if isinstance(b64, str) and b64:
+                return base64.b64decode(b64)
+            uri = payload.get("imageUri")
+            if isinstance(uri, str) and uri:
+                if uri.startswith("data:"):
+                    return base64.b64decode(uri.partition(",")[2])
+                if uri.startswith(("http://", "https://")):
+                    return await self._async_fetch_screenshot(uri)
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="communication_error",
+            translation_placeholders={
+                "name": self.name,
+                "func": "async_take_screenshot",
+                "error": "no image data in screenshot payload",
+            },
+        )
+
+    async def _async_fetch_screenshot(self, url: str) -> bytes:
+        """Fetch the screenshot resource (self-signed cert → verify off)."""
+        session = async_get_clientsession(self.hass)
+        try:
+            response = await session.get(url, ssl=False)
+            response.raise_for_status()
+            return await response.read()
+        except Exception as err:  # noqa: BLE001 - translated below
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="communication_error",
+                translation_placeholders={
+                    "name": self.name,
+                    "func": "async_take_screenshot",
+                    "error": f"fetching {url}: {err}",
+                },
+            ) from err
+
 
 type BscpylgtvConfigEntry = ConfigEntry[BscpylgtvCoordinator]
+
+
+def _write_screenshot_file(config_dir: str, filename: str, data: bytes) -> None:
+    """Write screenshot bytes to disk (executor only; blocking I/O)."""
+    path = Path(filename)
+    if not path.is_absolute():
+        path = Path(config_dir) / path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)

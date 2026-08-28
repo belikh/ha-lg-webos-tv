@@ -207,3 +207,63 @@ async def test_write_blocked_when_device_off(integration: Any) -> None:
         await _set(hass, ids["backlight"], 30)
     assert err.value.translation_key == "device_off"
     integration.tv.client.set_settings.assert_not_awaited()
+
+
+async def _enable_one(hass: HomeAssistant, integration: Any, key: str) -> str:
+    """Enable one number entity and reload so it materialises."""
+    entries = _numbers(hass, integration.entry.unique_id)
+    reg = entries[key]
+    er.async_get(hass).async_update_entity(reg.entity_id, disabled_by=None)
+    assert await hass.config_entries.async_reload(integration.entry.entry_id)
+    await hass.async_block_till_done()
+    integration.coordinator = integration.entry.runtime_data
+    integration.client = integration.tv.client
+    return reg.entity_id
+
+
+async def test_number_restores_after_reload_for_read_blocked_keys(
+    integration: Any,
+) -> None:
+    """Read-blocked keys (sharpness) keep the written value across reload.
+
+    Regression: the CX refuses sharpness/colorTemperature reads outright,
+    so the optimistic write-back used to vanish on every restart.
+    """
+    hass = integration.coordinator.hass
+    entity_id = await _enable_one(hass, integration, "sharpness")
+    await _set(hass, entity_id, 25)
+    assert float(hass.states.get(entity_id).state) == 25
+
+    assert await hass.config_entries.async_reload(integration.entry.entry_id)
+    await hass.async_block_till_done()
+    await hass.async_block_till_done()
+    entity_id = await _enable_one(hass, integration, "sharpness")
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert float(state.state) == 25, "restored value lost after reload"
+
+
+async def test_number_does_not_restore_pushed_keys(integration: Any) -> None:
+    """Pushed keys (backlight) take truth from the TV, not the restore."""
+    hass = integration.coordinator.hass
+    entity_id = await _enable_one(hass, integration, "backlight")
+    await _set(hass, entity_id, 33)
+    integration.tv.picture_settings = {
+        **integration.tv.picture_settings,
+        "backlight": 77,
+    }
+    integration.tv.push_update()
+    await hass.async_block_till_done()
+    assert float(hass.states.get(entity_id).state) == 77
+
+    integration.tv.picture_settings = {
+        **integration.tv.picture_settings,
+        "backlight": 50,
+    }
+    assert await hass.config_entries.async_reload(integration.entry.entry_id)
+    await hass.async_block_till_done()
+    entity_id = await _enable_one(hass, integration, "backlight")
+    integration.tv.push_update()
+    await hass.async_block_till_done()
+    # The push is authoritative: restored 33 must not override pushed 50.
+    assert float(hass.states.get(entity_id).state) == 50

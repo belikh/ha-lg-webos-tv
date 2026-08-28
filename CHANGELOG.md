@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.0.1
+
+### Fixed
+
+*   **Screenshots on current webOS sets.** webOS 04.40.16 (verified on a CX
+    OLED48CXPTA) returns no `image` key — only an `imageUri` pointing at a
+    self-signed `https://` resource on the TV, which crashed the screenshot
+    button with a raw `KeyError`. The shared implementation now handles all
+    payload shapes (base64 `image`, `imageUri` URL, `imageUri` data-URI)
+    and reports write failures properly.
+*   **Picture mode select now remembers its last written value** across HA
+    restarts. Some models (verified on a CX OLED48CXPTA, webOS 04.40.16)
+    refuse every read of the current picture mode, so the select showed
+    `unknown` after every restart even after being set from HA. The value
+    is now restored via `RestoreEntity`. After updating, set the mode once
+    from HA and it persists.
+*   **Sharpness / color temperature sliders remember their last written
+    value** for models that reject reads of those keys (same restore
+    treatment); the four TV-pushed sliders are unaffected.
+
+### Documented
+
+*   Troubleshooting entries: picture-mode `unknown` state and sharpness /
+    color temperature `unknown` state (firmware read restrictions), and the
+    empty channel select (no tuner channels scanned on the TV).
+
+### Verified against a real TV (OLED48CXPTA, webOS 04.40.16)
+
+*   Full function audit: every library call site re-checked against the
+    `bscpylgtv` 0.5.3 source and live-probed — volume/mute get+set,
+    sound-output get+change, toast notifications, screenshot capture,
+    picture-settings push shapes, channel-less behaviour. Writes verified
+    as same-value no-ops where a change would have been visible.
+
 ## 2.0.0
 
 **Major release — breaking changes.** Read

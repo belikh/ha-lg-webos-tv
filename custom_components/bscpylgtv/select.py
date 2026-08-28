@@ -24,6 +24,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from bscpylgtv import WebOsClient
 
@@ -70,8 +71,16 @@ async def async_setup_entry(
     )
 
 
-class BscpylgtvPictureModeSelect(BscpylgtvEntity, SelectEntity):
-    """Picture-mode select with a live-read enum and curated fallback."""
+class BscpylgtvPictureModeSelect(BscpylgtvEntity, SelectEntity, RestoreEntity):
+    """Picture-mode select.
+
+    ``RestoreEntity``: many models (verified on a CX OLED48CXPTA, webOS
+    04.40.16) refuse every read of the current ``pictureMode`` — the
+    settings service rejects the key, and the config service does not
+    carry it — so once written, the last mode is the only value we have.
+    Restoring it keeps the select meaningful across HA restarts instead
+    of falling back to ``unknown`` after every reboot.
+    """
 
     _attr_translation_key = "picture_mode"
 
@@ -82,6 +91,13 @@ class BscpylgtvPictureModeSelect(BscpylgtvEntity, SelectEntity):
         self._options: list[str] = list(PICTURE_MODES_FALLBACK)
         self._current: str | None = None
         self._read_client: WebOsClient | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the last written mode (TVs that block reads never push it)."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None and last.state not in ("unknown", "unavailable"):
+            self._current = last.state
 
     @property
     @override

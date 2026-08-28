@@ -95,7 +95,7 @@ async def test_press_screenshot_write_failure(integration: Any) -> None:
     registry_entry = _buttons(hass, integration.entry.unique_id)["screenshot"]
     with (
         patch(
-            "custom_components.bscpylgtv.button._write_screenshot",
+            "custom_components.bscpylgtv.coordinator._write_screenshot_file",
             side_effect=OSError("disk full"),
         ),
         pytest.raises(HomeAssistantError) as err,

@@ -14,7 +14,7 @@ from homeassistant.setup import async_setup_component
 
 from custom_components.bscpylgtv.const import DOMAIN
 
-from .conftest import FAKE_JPEG, FAKE_JPEG_B64
+from .conftest import FAKE_JPEG, FAKE_JPEG_2, FAKE_JPEG_2_B64, FAKE_JPEG_B64
 
 # Re-use the long-lived setup fixture.
 from .conftest import integration as _integration  # noqa: F401
@@ -224,14 +224,48 @@ async def test_take_screenshot_write_failure(integration: Any) -> None:
     hass = integration.coordinator.hass
     with (
         patch(
-            "custom_components.bscpylgtv.media_player.BscpylgtvMediaPlayer"
-            "._write_screenshot_file",
+            "custom_components.bscpylgtv.coordinator._write_screenshot_file",
             side_effect=OSError("disk full"),
         ),
         pytest.raises(HomeAssistantError) as err,
     ):
         await _call(hass, "take_screenshot", {"filename": "www/broken.jpg"})
     assert err.value.translation_key == "screenshot_write_failed"
+
+
+async def test_take_screenshot_imageuri_url(
+    integration: Any,
+) -> None:
+    """CX-shape payload: ``imageUri`` is a self-signed https URL to fetch.
+
+    Regression: webOS 04.40.16 (OLED48CXPTA) returns no ``image`` key at
+    all — only ``imageUri`` pointing at the TV's own https resource.
+    """
+    hass = integration.coordinator.hass
+    url = "https://10.1.1.209:3001/resources/d22582/capture.jpg"
+    integration.tv.client.take_screenshot = AsyncMock(return_value={"imageUri": url})
+    response_mock = AsyncMock()
+    response_mock.raise_for_status = lambda: None
+    response_mock.read = AsyncMock(return_value=FAKE_JPEG_2)
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=response_mock)
+    with patch(
+        "custom_components.bscpylgtv.coordinator.async_get_clientsession",
+        return_value=session,
+    ):
+        response = await _call(hass, "take_screenshot", return_response=True)
+    assert response == {MP: {"image": FAKE_JPEG_2_B64}}
+    session.get.assert_awaited_once_with(url, ssl=False)
+
+
+async def test_take_screenshot_imageuri_data_uri(integration: Any) -> None:
+    """``imageUri`` may also be an inline data: URI."""
+    hass = integration.coordinator.hass
+    integration.tv.client.take_screenshot = AsyncMock(
+        return_value={"imageUri": f"data:image/jpeg;base64,{FAKE_JPEG_2_B64}"}
+    )
+    response = await _call(hass, "take_screenshot", return_response=True)
+    assert response == {MP: {"image": FAKE_JPEG_2_B64}}
 
 
 async def test_take_screenshot_without_image_data(integration: Any) -> None:

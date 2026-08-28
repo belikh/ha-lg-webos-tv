@@ -258,6 +258,22 @@ data:
   the integration recovers by itself, so give it time. If wake never
   happens, enable **Quick Start+** (or a "Turn On by Wi-Fi" equivalent) in
   the TV's settings.
+- **Picture mode select shows `unknown`** — some models/firmware (verified
+  on a CX OLED48CXPTA) **refuse every read of the current picture mode**
+  (settings service rejects the key, config service does not carry it), so
+  there is nothing to display until you set a mode from HA once. After the
+  first write the value is remembered, including across restarts. The
+  option list itself is the curated fallback on such models.
+- **Sharpness / color temperature sliders show `unknown`** — the same
+  models reject reads of those keys too, and the TV's settings push does
+  not carry them. They become usable the first time you set them from HA
+  (the value is then remembered across restarts); the other four picture
+  sliders (backlight, contrast, brightness, color) are pushed live by the
+  TV and always show the real value.
+- **Channel select is empty** — the TV reports no tuner channels. Run a
+  channel scan on the TV (Settings → Channels) and the select fills in on
+  the next update. If you only use HDMI inputs, the channel entities are
+  simply not applicable.
 - **Connection went stale after TV restart / network change (zombie)** — the
   integration probes the connection every 10 s, abandons dead sockets and
   rebuilds the connection on its own; within ~15 s things should recover

@@ -23,6 +23,7 @@ picture-category writes on at least some models).
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, override
 
@@ -30,6 +31,7 @@ from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from bscpylgtv import WebOsClient
 
@@ -96,8 +98,15 @@ async def async_setup_entry(
     async_add_entities(BscpylgtvPictureNumber(entry, spec) for spec in PICTURE_NUMBERS)
 
 
-class BscpylgtvPictureNumber(BscpylgtvEntity, NumberEntity):
-    """A webOS picture-setting slider (plan AD-12)."""
+class BscpylgtvPictureNumber(BscpylgtvEntity, NumberEntity, RestoreEntity):
+    """A webOS picture-setting slider (plan AD-12).
+
+    ``RestoreEntity`` for read-blocked keys: models exist (verified on a
+    CX OLED48CXPTA, webOS 04.40.16) where ``sharpness`` /
+    ``colorTemperature`` reads are rejected outright, so the optimistic
+    write-back value would otherwise vanish on every HA restart. Pushed
+    keys ignore the restored value as soon as the TV pushes the truth.
+    """
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_entity_registry_enabled_default = False
@@ -123,6 +132,16 @@ class BscpylgtvPictureNumber(BscpylgtvEntity, NumberEntity):
         # Last value from a fresh push, the one-shot read, or an
         # optimistic write-back.
         self._local_value: int | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the last written value for keys the TV may refuse to read."""
+        await super().async_added_to_hass()
+        if not self._spec.needs_read:
+            return
+        last = await self.async_get_last_state()
+        if last is not None and last.state not in ("unknown", "unavailable"):
+            with suppress(ValueError):
+                self._local_value = int(float(last.state))
 
     @property
     @override
