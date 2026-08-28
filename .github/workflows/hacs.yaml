@@ -5,10 +5,12 @@ on:
     branches:
       - master
       - main
+      - bscpylgtv-integration
   pull_request:
     branches:
       - master
       - main
+  workflow_dispatch:
   schedule:
     - cron: "0 0 * * *"
 
