@@ -19,10 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This Home Assistant integration is built on the bscpylgtv library by chros73
-(https://github.com/chros73/bscpylgtv), also MIT licensed, and was heavily
-inspired by the architecture of Home Assistant's core `webostv` integration
-(Apache-2.0, Copyright home-assistant core authors).
