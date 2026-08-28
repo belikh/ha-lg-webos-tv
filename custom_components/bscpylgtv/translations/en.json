@@ -1,32 +1,44 @@
 {
   "config": {
-    "step": {
-      "user": {
-        "title": "Connect to LG WebOS TV",
-        "description": "Enter the IP address of your LG WebOS TV.",
-        "data": {
-          "host": "IP Address",
-          "name": "Name"
-        }
-      },
-      "pairing": {
-        "title": "Pairing with TV",
-        "description": "Please accept the pairing request on your TV, then click Submit."
-      },
-      "ssdp": {
-        "title": "Discovered LG WebOS TV",
-        "description": "Do you want to set up {name} ({host})?"
-      }
-    },
-    "error": {
-      "cannot_connect": "Failed to connect",
-      "pairing_failed": "Pairing failed or rejected",
-      "pairing_timeout": "Pairing timed out",
-      "no_host": "Could not determine host"
-    },
     "abort": {
       "already_configured": "Device is already configured",
-      "no_host": "Could not determine host"
+      "already_in_progress": "Configuration is already in progress",
+      "reauth_successful": "Re-authentication was successful",
+      "reconfigure_successful": "Re-configuration was successful",
+      "wrong_device": "The configured device is not the same found at this hostname or IP address."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect, please turn on your TV and try again.",
+      "error_pairing": "Pairing failed, make sure to accept the pairing request on the TV and try again."
+    },
+    "flow_title": "{name}",
+    "step": {
+      "pairing": {
+        "description": "Select **Submit** and accept the pairing request on your TV.",
+        "title": "LG webOS TV pairing"
+      },
+      "reauth_confirm": {
+        "description": "The pairing key is no longer accepted by the TV. Select **Submit** and accept the new pairing request on your TV.",
+        "title": "Re-pair LG webOS TV"
+      },
+      "reconfigure": {
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of your LG webOS TV."
+        }
+      },
+      "user": {
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of your LG webOS TV."
+        },
+        "description": "Turn on the TV, fill the host field and select **Submit**",
+        "title": "Connect to your LG webOS TV"
+      }
     }
   },
   "entity": {
@@ -34,48 +46,24 @@
       "reboot": {
         "name": "Reboot"
       },
-      "reboot_soft": {
-        "name": "Soft Reboot"
+      "screenshot": {
+        "name": "Screenshot"
       },
       "turn_screen_off": {
-        "name": "Turn Screen Off"
+        "name": "Turn screen off"
       },
       "turn_screen_on": {
-        "name": "Turn Screen On"
-      },
-      "show_screen_saver": {
-        "name": "Start Screensaver"
-      },
-      "take_screenshot": {
-        "name": "Take Screenshot"
-      },
-      "enable_tpc": {
-        "name": "Enable TPC"
-      },
-      "disable_tpc": {
-        "name": "Disable TPC"
-      },
-      "enable_gsr": {
-        "name": "Enable GSR"
-      },
-      "disable_gsr": {
-        "name": "Disable GSR"
+        "name": "Turn screen on"
       }
     },
-    "select": {
-      "picture_mode": {
-        "name": "Picture Mode"
-      },
-      "sound_output": {
-        "name": "Sound Output"
+    "notify": {
+      "notify": {
+        "name": "Notifications"
       }
     },
     "number": {
       "backlight": {
         "name": "Backlight"
-      },
-      "contrast": {
-        "name": "Contrast"
       },
       "brightness": {
         "name": "Brightness"
@@ -83,40 +71,186 @@
       "color": {
         "name": "Color"
       },
+      "color_temperature": {
+        "name": "Color temperature"
+      },
+      "contrast": {
+        "name": "Contrast"
+      },
       "sharpness": {
         "name": "Sharpness"
+      }
+    },
+    "remote": {
+      "remote": {
+        "name": "Remote"
+      }
+    },
+    "select": {
+      "channel": {
+        "name": "Channel"
       },
-      "oled_light": {
-        "name": "OLED Light"
+      "picture_mode": {
+        "name": "Picture mode"
+      },
+      "sound_output": {
+        "name": "Sound output"
       }
     },
     "sensor": {
       "current_app": {
-        "name": "Current App"
+        "name": "Current app"
+      },
+      "current_channel": {
+        "name": "Current channel"
+      },
+      "power_state": {
+        "name": "Power state"
       },
       "volume": {
         "name": "Volume"
-      },
-      "power_state": {
-        "name": "Power State"
-      },
-      "model_name": {
-        "name": "Model Name"
-      },
-      "major_ver": {
-        "name": "Software Major Version"
-      },
-      "minor_ver": {
-        "name": "Software Minor Version"
-      },
-      "device_id": {
-        "name": "Device ID"
       }
     },
     "switch": {
-      "ai_picture_pro": {
-        "name": "AI Picture Pro"
+      "gsr": {
+        "name": "GSR"
+      },
+      "tpc": {
+        "name": "TPC"
       }
+    }
+  },
+  "exceptions": {
+    "auth_failed": {
+      "message": "Pairing failed for device {device}, make sure to accept the pairing request on your TV."
+    },
+    "channel_not_found": {
+      "message": "Channel {channel} not found in the channel list."
+    },
+    "communication_error": {
+      "message": "Communication error while calling {func} for device {name}: {error}"
+    },
+    "device_off": {
+      "message": "Error calling {func} for device {name}: Device is off and cannot be controlled."
+    },
+    "device_unavailable": {
+      "message": "Unable to connect to device {device}. Turn the TV on, or configure its MAC address in the integration options so it can be woken remotely."
+    },
+    "invalid_mac": {
+      "message": "Invalid MAC address. Use the format aa:bb:cc:dd:ee:ff."
+    },
+    "notify_communication_error": {
+      "message": "Communication error while sending notification to device {name}: {error}"
+    },
+    "notify_device_off": {
+      "message": "Error sending notification to device {name}: Device is off and cannot be controlled."
+    },
+    "notify_icon_not_found": {
+      "message": "Icon {icon_path} not found when sending notification for device {name}"
+    },
+    "screenshot_write_failed": {
+      "message": "Could not write the screenshot file to {path}."
+    },
+    "source_not_found": {
+      "message": "Source {source} not found in the sources list for {name}."
+    },
+    "unknown_button": {
+      "message": "Unknown button {button}."
+    }
+  },
+  "options": {
+    "error": {
+      "cannot_connect": "Failed to connect, please turn on your TV and try again.",
+      "error_pairing": "Pairing failed, make sure to accept the pairing request on the TV and try again.",
+      "invalid_mac": "Invalid MAC address. Use the format aa:bb:cc:dd:ee:ff."
+    },
+    "step": {
+      "init": {
+        "data": {
+          "mac": "MAC address",
+          "sources": "Sources list"
+        },
+        "data_description": {
+          "mac": "MAC address of the TV, used to send wake-on-LAN packets so the TV can be turned on. This is normally detected automatically; only set it manually if turning the TV on does not work, e.g. when the TV was switched off during setup.",
+          "sources": "List of sources to show in the media player source list"
+        },
+        "description": "Select the sources to show for this TV. Set the MAC address only if the TV could not be turned on automatically.",
+        "title": "LG WebOS TV (bscpylgtv) options"
+      }
+    }
+  },
+  "services": {
+    "button": {
+      "description": "Send a remote button press to the TV.",
+      "fields": {
+        "button": {
+          "description": "Name of the button to press. Known values include LEFT, RIGHT, UP, DOWN, HOME, BACK, ENTER, MENU, EXIT, INFO, DASH, ASTERISK, CC, MUTE, VOLUMEUP, VOLUMEDOWN, CHANNELUP, CHANNELDOWN, PLAY, PAUSE, STOP, RED, GREEN, BLUE, YELLOW, POWER, 0-9 and the pointer/IME specials CLICK, MOVE, SCROLL and TEXT.",
+          "name": "Button"
+        }
+      },
+      "name": "Button"
+    },
+    "command": {
+      "description": "Send a raw SSAP command to the TV.",
+      "fields": {
+        "command": {
+          "description": "SSAP endpoint to call, e.g. system.launcher/open.",
+          "name": "Command"
+        },
+        "payload": {
+          "description": "An optional payload to provide to the endpoint in the format of key value pairs.",
+          "name": "Payload"
+        }
+      },
+      "name": "Command"
+    },
+    "launch_app": {
+      "description": "Launch an app on the TV.",
+      "fields": {
+        "app_id": {
+          "description": "App to launch, e.g. com.webos.app.youtube or netflix.",
+          "name": "App ID"
+        },
+        "params": {
+          "description": "Optional parameters to pass to the app, e.g. content to open directly.",
+          "name": "Parameters"
+        }
+      },
+      "name": "Launch app"
+    },
+    "select_sound_output": {
+      "description": "Change the sound output of the TV.",
+      "fields": {
+        "sound_output": {
+          "description": "Name of the sound output to switch to, e.g. tv_speaker, external_arc or bt_soundbar.",
+          "name": "Sound output"
+        }
+      },
+      "name": "Select sound output"
+    },
+    "set_settings": {
+      "description": "Write settings via the TV's settings API (power-user escape hatch).",
+      "fields": {
+        "category": {
+          "description": "Settings category, e.g. picture.",
+          "name": "Category"
+        },
+        "settings": {
+          "description": "Settings key/value pairs to write, e.g. backlight: 50.",
+          "name": "Settings"
+        }
+      },
+      "name": "Set settings"
+    },
+    "take_screenshot": {
+      "description": "Take a screenshot of the current TV screen.",
+      "fields": {
+        "filename": {
+          "description": "Optional file path to write the JPEG screenshot to. When omitted, the image is returned as base64 in the service response.",
+          "name": "Filename"
+        }
+      },
+      "name": "Take screenshot"
     }
   }
 }

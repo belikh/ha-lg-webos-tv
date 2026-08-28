@@ -8,3 +8,9 @@ __pycache__/
 env/
 venv/
 *.log
+.coverage
+.opencode/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+www/

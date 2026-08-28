@@ -1,0 +1,49 @@
+# Tooling configuration for the bscpylgtv Home Assistant integration repo.
+# This repository is not a package, so no [project] metadata is needed.
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "PTH", "ASYNC", "ANN", "D"]
+ignore = [
+    "D203",  # incompatible with D211
+    "D213",  # incompatible with D212
+    "ANN401",  # Any is needed for voluptuous schema callbacks
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",  # asserts are the point of tests
+    "ANN",   # test fixtures are loosely typed on purpose
+    "D",     # docstrings are not required in tests
+]
+
+[tool.ruff.format]
+# Defaults are used as-is; the section is declared for explicitness.
+
+[tool.mypy]
+python_version = "3.14"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = false
+files = ["custom_components/bscpylgtv"]
+# The integration directory shares its name with the bscpylgtv library;
+# without an explicit package base mypy resolves ``bscpylgtv`` to
+# custom_components/bscpylgtv (shadowing site-packages) and every
+# ``from bscpylgtv import WebOsClient`` fails with attr-defined.
+explicit_package_bases = true
+mypy_path = "."
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = [
+    # sqlitedict's background thread can leave its sqlite connection to the
+    # GC when a legacy key file is deliberately corrupt (migration test);
+    # the warning's attribution is GC-timing dependent, so it cannot be
+    # pinned to one test. Message-scoped: every other ResourceWarning
+    # (unclosed sockets, files, sessions) still surfaces.
+    "ignore:unclosed database:ResourceWarning",
+]

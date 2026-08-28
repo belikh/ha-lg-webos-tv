@@ -1,107 +1,148 @@
-"""Support for LG WebOS TV sensors."""
+"""Sensor entities for the LG WebOS TV (bscpylgtv) integration.
+
+Four sensors (plan AD-15): ``current_app`` (title-resolved via the apps
+dict), ``volume`` (percent, MEASUREMENT), ``power_state`` (ENUM with the
+fixed webOS power-state options) and ``current_channel`` (DIAGNOSTIC,
+``"<channelNumber> <channelName>"``). Model/firmware/UUID deliberately
+live in the device registry entry, not sensors. All sensors are
+``CoordinatorEntity``-driven: the push coordinator fires
+``_handle_coordinator_update`` (inherited: writes state) whenever the
+TV pushes or the watchdog ticks; ``should_poll`` is inherited False.
+"""
+
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
+from typing import override
 
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, PERCENTAGE
+from homeassistant.const import PERCENTAGE, EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.typing import StateType
 
 from bscpylgtv import WebOsClient
-from . import BscpylgtvConfigEntry
-from .entity import BscpylgtvEntity
 
-_LOGGER = logging.getLogger(__name__)
+from .coordinator import BscpylgtvConfigEntry
+from .entity import BscpylgtvEntity
+from .select import format_channel
+
+PARALLEL_UPDATES = 0
+
+# Fixed option set for the ENUM power_state sensor (plan AD-15). Values
+# are the webOS power states the library reports (get_power_state);
+# anything unexpected is folded onto "Unknown" so the ENUM contract
+# (native_value ∈ options) always holds.
+POWER_STATE_OPTIONS: tuple[str, ...] = (
+    "Active",
+    "Active Standby",
+    "Screen Off",
+    "Suspend",
+    "Request Active",
+    "Power Off",
+    "Unknown",
+)
+
+
+def _current_app_value(client: WebOsClient) -> StateType:
+    """Resolve the foreground app id to its title (fallback: raw id)."""
+    app_id = client.current_appId
+    if not app_id:
+        return None
+    app = (client.apps or {}).get(app_id)
+    if isinstance(app, dict) and app.get("title"):
+        return str(app["title"])
+    return str(app_id)
+
+
+def _volume_value(client: WebOsClient) -> StateType:
+    """Return the subscribed volume (None until the TV pushes one)."""
+    return client.volume
+
+
+def _power_state_value(client: WebOsClient) -> StateType:
+    """Return the current power state, folded onto the option set."""
+    state = (client.power_state or {}).get("state", "Unknown")
+    return state if state in POWER_STATE_OPTIONS else "Unknown"
+
+
+def _current_channel_value(client: WebOsClient) -> StateType:
+    """Return the current channel formatted like the channel select."""
+    channel = client.current_channel
+    return format_channel(channel) if channel else None
+
 
 @dataclass(frozen=True, kw_only=True)
 class BscpylgtvSensorEntityDescription(SensorEntityDescription):
-    """Describes LG WebOS TV sensor entity."""
-    value_fn: Callable[[WebOsClient], str | int | float | None]
+    """Describes a bscpylgtv sensor with its client-derived value."""
+
+    value_fn: Callable[[WebOsClient], StateType]
+
 
 SENSORS: tuple[BscpylgtvSensorEntityDescription, ...] = (
     BscpylgtvSensorEntityDescription(
         key="current_app",
         translation_key="current_app",
-        value_fn=lambda client: client.current_appId,
+        value_fn=_current_app_value,
     ),
     BscpylgtvSensorEntityDescription(
         key="volume",
         translation_key="volume",
+        # SensorDeviceClass.PERCENTAGE no longer exists in Home Assistant
+        # (removed upstream); the "%" unit plus MEASUREMENT state class
+        # carry the same semantics.
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda client: client.volume,
+        value_fn=_volume_value,
     ),
     BscpylgtvSensorEntityDescription(
         key="power_state",
         translation_key="power_state",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda client: client.power_state.get("state") if isinstance(client.power_state, dict) else str(client.power_state),
+        device_class=SensorDeviceClass.ENUM,
+        options=list(POWER_STATE_OPTIONS),
+        value_fn=_power_state_value,
     ),
     BscpylgtvSensorEntityDescription(
-        key="model_name",
-        translation_key="model_name",
+        key="current_channel",
+        translation_key="current_channel",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda client: client.software_info.get("model_name") if client.software_info else None,
-    ),
-    BscpylgtvSensorEntityDescription(
-        key="major_ver",
-        translation_key="major_ver",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda client: client.software_info.get("major_ver") if client.software_info else None,
-    ),
-    BscpylgtvSensorEntityDescription(
-        key="minor_ver",
-        translation_key="minor_ver",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda client: client.software_info.get("minor_ver") if client.software_info else None,
-    ),
-    BscpylgtvSensorEntityDescription(
-        key="device_id",
-        translation_key="device_id",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda client: client.software_info.get("device_id") if client.software_info else None,
+        value_fn=_current_channel_value,
     ),
 )
 
+
 async def async_setup_entry(
-    hass: HomeAssistant, entry: BscpylgtvConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: BscpylgtvConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the LG WebOS TV sensors."""
-    async_add_entities(
-        BscpylgtvSensor(entry, description) for description in SENSORS
-    )
+    """Set up the LG WebOS TV sensor platform."""
+    async_add_entities(BscpylgtvSensor(entry, description) for description in SENSORS)
+
 
 class BscpylgtvSensor(BscpylgtvEntity, SensorEntity):
-    """Representation of an LG WebOS TV sensor."""
+    """A sensor reading live client state (push/coordinator driven)."""
 
     entity_description: BscpylgtvSensorEntityDescription
 
     def __init__(
-        self, entry: BscpylgtvConfigEntry, description: BscpylgtvSensorEntityDescription
+        self,
+        entry: BscpylgtvConfigEntry,
+        description: BscpylgtvSensorEntityDescription,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(entry)
         self.entity_description = description
-        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        self._attr_unique_id = f"{entry.unique_id}_{description.key}"
 
     @property
-    def native_value(self) -> str | int | float | None:
-        """Return the state of the sensor."""
-        if self.entity_description.key == "current_app":
-            app_id = self._client.current_appId
-            if not app_id:
-                return None
-            # client.apps is a dict keyed by app id
-            app = self._client.apps.get(app_id)
-            if isinstance(app, dict):
-                return app.get("title") or app_id
-            return app_id
-
-        return self.entity_description.value_fn(self._client)
+    @override
+    def native_value(self) -> StateType:
+        """Return the sensor value derived from the live client state."""
+        return self.entity_description.value_fn(self.client)

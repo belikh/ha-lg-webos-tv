@@ -1,125 +1,108 @@
-"""Support for LG WebOS TV buttons."""
+"""Button entities for the LG WebOS TV (bscpylgtv) integration.
+
+Four buttons (plan §3.2): ``turn_screen_off`` / ``turn_screen_on``
+(plain), ``screenshot`` (writes a JPG into ``config/www``) and ``reboot``
+(CONFIG, disabled by default). The dead v1 buttons ``reboot_soft`` and
+``show_screen_saver`` are intentionally gone (plan AD-9: those library
+methods are author-documented as non-functional on modern webOS).
+"""
+
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
-from typing import Callable, Awaitable
+import base64
+from pathlib import Path
+from typing import override
 
-from homeassistant.components.button import (
-    ButtonEntity,
-    ButtonEntityDescription,
-)
+from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from bscpylgtv import WebOsClient
-from . import BscpylgtvConfigEntry
-from .entity import BscpylgtvEntity
+from .const import DOMAIN
+from .coordinator import BscpylgtvConfigEntry
+from .entity import BscpylgtvEntity, cmd
 
-_LOGGER = logging.getLogger(__name__)
+PARALLEL_UPDATES = 0
 
-@dataclass(frozen=True, kw_only=True)
-class BscpylgtvButtonEntityDescription(ButtonEntityDescription):
-    """Describes LG WebOS TV button entity."""
-    press_action: Callable[[WebOsClient], Awaitable[None]]
-
-BUTTONS: tuple[BscpylgtvButtonEntityDescription, ...] = (
-    BscpylgtvButtonEntityDescription(
+BUTTONS: tuple[ButtonEntityDescription, ...] = (
+    ButtonEntityDescription(key="turn_screen_off", translation_key="turn_screen_off"),
+    ButtonEntityDescription(key="turn_screen_on", translation_key="turn_screen_on"),
+    ButtonEntityDescription(key="screenshot", translation_key="screenshot"),
+    ButtonEntityDescription(
         key="reboot",
         translation_key="reboot",
-        icon="mdi:restart",
         entity_category=EntityCategory.CONFIG,
         entity_registry_enabled_default=False,
-        press_action=lambda client: client.reboot(),
-    ),
-    BscpylgtvButtonEntityDescription(
-        key="reboot_soft",
-        translation_key="reboot_soft",
-        icon="mdi:restart",
-        entity_category=EntityCategory.CONFIG,
-        entity_registry_enabled_default=False,
-        press_action=lambda client: client.reboot_soft(),
-    ),
-    BscpylgtvButtonEntityDescription(
-        key="turn_screen_off",
-        translation_key="turn_screen_off",
-        icon="mdi:television-off",
-        press_action=lambda client: client.turn_screen_off(),
-    ),
-    BscpylgtvButtonEntityDescription(
-        key="turn_screen_on",
-        translation_key="turn_screen_on",
-        icon="mdi:television",
-        press_action=lambda client: client.turn_screen_on(),
-    ),
-    BscpylgtvButtonEntityDescription(
-        key="show_screen_saver",
-        translation_key="show_screen_saver",
-        icon="mdi:image",
-        press_action=lambda client: client.show_screen_saver(),
-    ),
-    BscpylgtvButtonEntityDescription(
-        key="take_screenshot",
-        translation_key="take_screenshot",
-        icon="mdi:camera",
-        press_action=lambda client: client.take_screenshot(),
-    ),
-    BscpylgtvButtonEntityDescription(
-        key="enable_tpc",
-        translation_key="enable_tpc",
-        icon="mdi:check",
-        entity_category=EntityCategory.CONFIG,
-        entity_registry_enabled_default=False,
-        press_action=lambda client: client.enable_tpc_or_gsr("tpc", True),
-    ),
-    BscpylgtvButtonEntityDescription(
-        key="disable_tpc",
-        translation_key="disable_tpc",
-        icon="mdi:close",
-        entity_category=EntityCategory.CONFIG,
-        entity_registry_enabled_default=False,
-        press_action=lambda client: client.enable_tpc_or_gsr("tpc", False),
-    ),
-    BscpylgtvButtonEntityDescription(
-        key="enable_gsr",
-        translation_key="enable_gsr",
-        icon="mdi:check",
-        entity_category=EntityCategory.CONFIG,
-        entity_registry_enabled_default=False,
-        press_action=lambda client: client.enable_tpc_or_gsr("gsr", True),
-    ),
-    BscpylgtvButtonEntityDescription(
-        key="disable_gsr",
-        translation_key="disable_gsr",
-        icon="mdi:close",
-        entity_category=EntityCategory.CONFIG,
-        entity_registry_enabled_default=False,
-        press_action=lambda client: client.enable_tpc_or_gsr("gsr", False),
     ),
 )
 
+
+def _write_screenshot(path: Path, data: bytes) -> None:
+    """Write screenshot bytes to ``path`` (executor job; parents created)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
 async def async_setup_entry(
-    hass: HomeAssistant, entry: BscpylgtvConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: BscpylgtvConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the LG WebOS TV buttons."""
-    async_add_entities(
-        BscpylgtvButton(entry, description) for description in BUTTONS
-    )
+    """Set up the LG WebOS TV button platform."""
+    async_add_entities(BscpylgtvButton(entry, description) for description in BUTTONS)
+
 
 class BscpylgtvButton(BscpylgtvEntity, ButtonEntity):
-    """Representation of an LG WebOS TV button."""
+    """A button that triggers a one-shot TV command (plan AD-9/AD-11)."""
 
-    entity_description: BscpylgtvButtonEntityDescription
+    entity_description: ButtonEntityDescription
 
     def __init__(
-        self, entry: BscpylgtvConfigEntry, description: BscpylgtvButtonEntityDescription
+        self, entry: BscpylgtvConfigEntry, description: ButtonEntityDescription
     ) -> None:
-        """Initialize the entity."""
+        """Initialize the button."""
         super().__init__(entry)
         self.entity_description = description
-        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        self._attr_unique_id = f"{entry.unique_id}_{description.key}"
 
+    @cmd
+    @override
     async def async_press(self) -> None:
-        """Handle the button press."""
-        await self.entity_description.press_action(self._client)
+        """Press the button."""
+        key = self.entity_description.key
+        if key == "turn_screen_off":
+            await self.client.turn_screen_off()
+        elif key == "turn_screen_on":
+            await self.client.turn_screen_on()
+        elif key == "screenshot":
+            await self._async_write_screenshot()
+        else:
+            await self.client.reboot()
+
+    async def _async_write_screenshot(self) -> None:
+        """Capture a screenshot and write it under ``config/www`` (AD-11).
+
+        The payload of ``take_screenshot()`` carries a base64-encoded
+        960x540 JPG in ``image``. The write happens locally: failures are
+        raised as the dedicated ``screenshot_write_failed`` error rather
+        than letting the ``cmd`` wrapper misread an ``OSError`` as a
+        communication failure. Duplicated from the media_player screenshot
+        mixin on purpose: Cluster C lands in parallel, so this button
+        keeps a local implementation to avoid a cross-cluster import.
+        """
+        payload = await self.client.take_screenshot()
+        data = base64.b64decode(payload["image"])
+        path = Path(
+            self.hass.config.path("www", f"bscpylgtv_{self._entry.unique_id}.jpg")
+        )
+        try:
+            await self.hass.async_add_executor_job(_write_screenshot, path, data)
+        except (OSError, KeyError, ValueError) as ex:
+            # KeyError/ValueError cover a missing ``image`` field and
+            # malformed base64 from unexpected TV responses.
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="screenshot_write_failed",
+                translation_placeholders={"path": str(path)},
+            ) from ex

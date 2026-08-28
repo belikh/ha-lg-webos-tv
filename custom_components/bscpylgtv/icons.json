@@ -1,0 +1,57 @@
+{
+  "entity": {
+    "button": {
+      "reboot": {
+        "default": "mdi:restart"
+      },
+      "screenshot": {
+        "default": "mdi:camera-image"
+      },
+      "turn_screen_off": {
+        "default": "mdi:television-off"
+      },
+      "turn_screen_on": {
+        "default": "mdi:television-shimmer"
+      }
+    },
+    "remote": {
+      "remote": {
+        "default": "mdi:remote"
+      }
+    },
+    "sensor": {
+      "current_app": {
+        "default": "mdi:apps"
+      },
+      "current_channel": {
+        "default": "mdi:television-guide"
+      },
+      "power_state": {
+        "default": "mdi:power"
+      },
+      "volume": {
+        "default": "mdi:volume-high"
+      }
+    }
+  },
+  "services": {
+    "button": {
+      "service": "mdi:button-pointer"
+    },
+    "command": {
+      "service": "mdi:console"
+    },
+    "launch_app": {
+      "service": "mdi:launch"
+    },
+    "select_sound_output": {
+      "service": "mdi:volume-source"
+    },
+    "set_settings": {
+      "service": "mdi:tune"
+    },
+    "take_screenshot": {
+      "service": "mdi:camera"
+    }
+  }
+}

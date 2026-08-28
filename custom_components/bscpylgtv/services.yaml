@@ -1,94 +1,89 @@
-# Service definitions
-launch_app:
-  name: Launch App
-  description: Launches an application by ID.
-  fields:
-    entity_id:
-      description: The media player entity.
-      name: Entity
-      required: true
-      selector:
-        entity:
-          domain: media_player
-          integration: bscpylgtv
-    app_id:
-      description: The ID of the application (e.g., com.webos.app.youtube).
-      name: App ID
-      required: true
-      selector:
-        text:
+# Structure only for the bscpylgtv entity services (AD-14/AC-24):
+# every human-readable string lives in translations/en.json.
 
-launch_app_with_params:
-  name: Launch App with Params
-  description: Launches an application with specific parameters.
+button:
+  target:
+    entity:
+      integration: bscpylgtv
+      domain: media_player
   fields:
-    entity_id:
-      description: The media player entity.
-      name: Entity
+    button:
       required: true
-      selector:
-        entity:
-          domain: media_player
-          integration: bscpylgtv
-    app_id:
-      description: The ID of the application.
-      name: App ID
-      required: true
+      example: "LEFT"
       selector:
         text:
-    params:
-      description: JSON parameters.
-      name: Parameters
-      required: true
-      selector:
-        object:
 
 command:
-  name: Send Command
-  description: Sends a generic command to the TV.
+  target:
+    entity:
+      integration: bscpylgtv
+      domain: media_player
   fields:
-    entity_id:
-      description: The media player entity.
-      name: Entity
-      required: true
-      selector:
-        entity:
-          domain: media_player
-          integration: bscpylgtv
     command:
-      description: The command to send (method name).
-      name: Command
       required: true
+      example: "system.launcher/open"
       selector:
         text:
     payload:
-      description: Arguments for the command (list or dict).
-      name: Payload
-      required: false
+      example: >-
+        target: https://www.google.com
       selector:
         object:
 
-set_settings:
-  name: Set Settings
-  description: Set system or picture settings.
+select_sound_output:
+  target:
+    entity:
+      integration: bscpylgtv
+      domain: media_player
   fields:
-    entity_id:
-      description: The media player entity.
-      name: Entity
+    sound_output:
       required: true
+      example: "external_speaker"
       selector:
-        entity:
-          domain: media_player
-          integration: bscpylgtv
-    category:
-      description: The settings category (e.g., picture, other).
-      name: Category
+        text:
+
+launch_app:
+  target:
+    entity:
+      integration: bscpylgtv
+      domain: media_player
+  fields:
+    app_id:
       required: true
+      example: "com.webos.app.youtube"
+      selector:
+        text:
+    params:
+      example: >-
+        target: https://www.youtube.com
+      selector:
+        object:
+
+take_screenshot:
+  target:
+    entity:
+      integration: bscpylgtv
+      domain: media_player
+  fields:
+    filename:
+      example: "www/bscpylgtv_screenshot.jpg"
+      selector:
+        text:
+
+set_settings:
+  target:
+    entity:
+      integration: bscpylgtv
+      domain: media_player
+  fields:
+    category:
+      required: true
+      example: "picture"
       selector:
         text:
     settings:
-      description: Dictionary of settings to set.
-      name: Settings
       required: true
+      example: >-
+        contrast: 50
       selector:
         object:

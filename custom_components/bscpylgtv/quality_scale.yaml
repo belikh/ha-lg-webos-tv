@@ -1,0 +1,99 @@
+rules:
+  # Bronze
+  action-setup: done
+  appropriate-polling:
+    status: done
+    comment: Push-based websocket integration. The 10s coordinator interval is
+      a liveness watchdog (connection probe), not a state poll; TV state arrives
+      via subscriptions.
+  brands:
+    status: exempt
+    comment: Custom integration distributed via HACS; brand assets are managed
+      by this repository, not the home-assistant/brands repository.
+  common-modules:
+    status: exempt
+    comment: The integration does not use common patterns.
+  config-flow-test-coverage: done
+  config-flow: done
+  dependency-transparency: done
+  docs-actions: done
+  docs-conditions:
+    status: exempt
+    comment: This integration does not have any conditions.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  docs-triggers:
+    status: exempt
+    comment: This integration does not have any device triggers.
+  entity-event-setup: done
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
+
+  # Silver
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable:
+    status: done
+    comment: When a MAC address is known, entities stay available and show off
+      while the TV is unreachable; without a wake path the config entry reports
+      unavailable via UpdateFailed.
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow: done
+  test-coverage: done
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery-update-info: done
+  discovery: done
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices:
+    status: exempt
+    comment: The integration connects to a single device per config entry.
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default: done
+  entity-translations:
+    status: done
+    comment: Entity names are fully translated in translations/en.json. Only
+      English ships in this repository; community translations are welcome.
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow: done
+  repair-issues:
+    status: exempt
+    comment: Pairing and connection problems surface through the config entry
+      error/reauth states and flows; the integration does not raise repair
+      issues.
+  stale-devices:
+    status: exempt
+    comment: The integration connects to a single device per config entry.
+
+  # Platinum
+  async-dependency:
+    status: done
+    comment: bscpylgtv is an asyncio-native websocket client; blocking work
+      (client construction) runs in an executor.
+  inject-websession:
+    status: exempt
+    comment: bscpylgtv owns its own websocket connection; there is no aiohttp
+      session to inject.
+  strict-typing:
+    status: todo
+    comment: The integration's own code passes the repository's pragmatic
+      mypy configuration; full strict typing is still in progress.
