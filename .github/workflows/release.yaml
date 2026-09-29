@@ -3,7 +3,13 @@ name: Release
 on:
   push:
     tags:
+      # Existing tags are numeric (2.0.2); v-prefixed tags stay supported.
       - 'v*'
+      - '[0-9]*'
+
+# softprops/action-gh-release needs to create the release with GITHUB_TOKEN.
+permissions:
+  contents: write
 
 jobs:
   release:
@@ -11,10 +17,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Extract changelog section for this tag
+        id: changelog
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          body="$(awk -v ver="$tag" '
+            $0 == "## " ver { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md)"
+          if [ -n "$body" ]; then
+            { echo "# Release notes — v${tag}"; echo; echo "$body"; } > release_body.md
+            echo "has_body=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_body=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Release (changelog body)
+        if: steps.changelog.outputs.has_body == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_body.md
+          files: |
+            custom_components/bscpylgtv/manifest.json
+
+      - name: Create Release (generated notes)
+        if: steps.changelog.outputs.has_body != 'true'
+        uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
