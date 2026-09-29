@@ -50,6 +50,7 @@ from .const import (
 )
 from .coordinator import (
     BscpylgtvConfigEntry,
+    async_connect_with_manifest_fallback,
     async_probe_device_uuid,
     extract_mac,
     make_pairing_client,
@@ -115,30 +116,40 @@ def _entry_data(
     return data
 
 
-async def _async_connect_client(
-    client: WebOsClient, connect_timeout: float
-) -> WebOsClient:
-    """Connect ``client``, abandoning it if the connect fails or wedges."""
-    try:
-        await asyncio.wait_for(client.connect(), connect_timeout)
-    except Exception:  # noqa: BLE001 - release, then let the caller map it
-        release_client(client)
-        raise
-    return client
-
-
 async def _async_pair(hass: HomeAssistant, host: str) -> WebOsClient:
-    """Connect a fresh PROMPT-pairing client (plan AD-2)."""
+    """Connect a fresh PROMPT-pairing client (plan AD-2).
+
+    Pairing does not verify the link: no key exists until the prompt is
+    accepted, so a manifest rejection surfaces as PyLGTVPairException and
+    the coordinator helper retries once with the unsigned manifest
+    (webOS 26 — see ``build_unsigned_manifest``).
+    """
     client = await make_pairing_client(hass, host)
-    return await _async_connect_client(client, _PAIRING_TIMEOUT)
+    return await async_connect_with_manifest_fallback(
+        client,
+        make_unsigned=lambda: make_pairing_client(hass, host, unsigned_manifest=True),
+        connect_timeout=_PAIRING_TIMEOUT,
+        verify=False,
+    )
 
 
 async def _async_connect_with_key(
     hass: HomeAssistant, host: str, client_key: str | None
 ) -> WebOsClient:
-    """Connect a runtime client with the stored key (reconfigure/options)."""
+    """Connect a runtime client with the stored key (reconfigure/options).
+
+    Verified like every runtime connect: on webOS 26 the signed manifest
+    can be rejected without raising, so a real request is the only
+    reliable fallback signal.
+    """
     client = await make_runtime_client(hass, host, client_key)
-    return await _async_connect_client(client, RECONNECT_TIMEOUT)
+    return await async_connect_with_manifest_fallback(
+        client,
+        make_unsigned=lambda: make_runtime_client(
+            hass, host, client_key, unsigned_manifest=True
+        ),
+        connect_timeout=RECONNECT_TIMEOUT,
+    )
 
 
 async def _async_disconnect(client: WebOsClient) -> None:

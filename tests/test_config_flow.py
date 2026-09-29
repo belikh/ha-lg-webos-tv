@@ -157,6 +157,113 @@ async def test_user_flow_cannot_connect(
     assert result["errors"] == {"base": "cannot_connect"}
 
 
+async def test_user_flow_retries_unsigned_manifest(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """A webOS 26 manifest rejection retries once with the unsigned manifest."""
+    calls: list[bool] = []
+
+    def make_pairing(
+        hass: HomeAssistant,
+        host: str,
+        *,
+        unsigned_manifest: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        calls.append(unsigned_manifest)
+        client = tv.create_client(host, client_key=None)
+        if unsigned_manifest:
+
+            async def connect_and_pair() -> None:
+                client._connected = True  # noqa: SLF001 - accepted on the TV
+                client.client_key = "fresh-key"
+
+        else:
+
+            async def connect_and_pair() -> None:
+                raise PyLGTVPairException("Unable to pair")
+
+        client.connect = connect_and_pair  # type: ignore[method-assign]
+        return client
+
+    with patch(
+        "custom_components.bscpylgtv.config_flow.make_pairing_client",
+        AsyncMock(side_effect=make_pairing),
+    ):
+        result = await submit_user_flow(hass)
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_CLIENT_KEY] == "fresh-key"
+    # Signed manifest first, then exactly one unsigned retry.
+    assert calls == [False, True]
+
+
+async def test_user_flow_unsigned_retry_rejection_fails_cleanly(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Both manifests rejected: error_pairing after one retry, no loop."""
+    calls: list[bool] = []
+
+    def make_pairing(
+        hass: HomeAssistant,
+        host: str,
+        *,
+        unsigned_manifest: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        calls.append(unsigned_manifest)
+        client = tv.create_client(host, client_key=None)
+
+        async def connect_and_pair() -> None:
+            raise PyLGTVPairException("Unable to pair")
+
+        client.connect = connect_and_pair  # type: ignore[method-assign]
+        return client
+
+    with patch(
+        "custom_components.bscpylgtv.config_flow.make_pairing_client",
+        AsyncMock(side_effect=make_pairing),
+    ):
+        result = await submit_user_flow(hass)
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] == "form"
+    assert result["errors"] == {"base": "error_pairing"}
+    assert calls == [False, True]
+
+
+async def test_user_flow_transport_failure_does_not_retry(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """An unreachable TV costs one pairing attempt: no manifest retry."""
+    calls: list[bool] = []
+
+    def make_pairing(
+        hass: HomeAssistant,
+        host: str,
+        *,
+        unsigned_manifest: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        calls.append(unsigned_manifest)
+        client = tv.create_client(host, client_key=None)
+
+        async def connect_and_pair() -> None:
+            raise OSError("unreachable")
+
+        client.connect = connect_and_pair  # type: ignore[method-assign]
+        return client
+
+    with patch(
+        "custom_components.bscpylgtv.config_flow.make_pairing_client",
+        AsyncMock(side_effect=make_pairing),
+    ):
+        result = await submit_user_flow(hass)
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] == "form"
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert calls == [False]
+
+
 async def test_user_flow_hello_broken_uses_mac(
     hass: HomeAssistant, tv: TVSimulator
 ) -> None:

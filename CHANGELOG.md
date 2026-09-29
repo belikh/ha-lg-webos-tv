@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.0.3
+
+### Fixed
+
+*   **webOS 26 sets (firmware 43.x) — pairing and reconnection.** LG
+    blacklists the certificate in the legacy signed registration manifest
+    (`403 Pairing rejected: blacklisted certificate detected`) and
+    invalidates existing pairing keys on these sets, while `bscpylgtv` still
+    sends that manifest. The integration now keeps the signed manifest (and
+    the elevated permissions only it grants — `WRITE_SETTINGS` powers the
+    picture-setting controls) but detects the rejection — a
+    `PyLGTVPairException` while pairing, or a dead link right after a
+    stored-key connect — and retries once with the merged unsigned
+    manifest. This mirrors the recovery `aiowebostv` shipped for Home
+    Assistant core 2026.8.3. A transport failure (TV off or unreachable)
+    does **not** trigger the retry, so an unreachable TV still costs a
+    single connect timeout. When the TV invalidated the old key, the
+    reauthentication flow re-pairs with the same fallback.
+
 ## 2.0.2
 
 ### Fixed

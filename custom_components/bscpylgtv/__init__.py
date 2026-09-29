@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import importlib
 import re
-from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +32,7 @@ from .const import (
 from .coordinator import (
     BscpylgtvConfigEntry,
     BscpylgtvCoordinator,
+    async_connect_with_manifest_fallback,
     async_probe_device_uuid,
     extract_mac,
     make_runtime_client,
@@ -224,29 +224,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
     coordinator = BscpylgtvCoordinator(hass, entry, client)
     entry.runtime_data = coordinator
 
-    # Register the push callback BEFORE connect: connect fires callbacks at
-    # the end of a successful handshake, and the library clears the callback
-    # list on teardown, so every fresh client must re-register (AD-2).
-    # Plain coroutine function: bscpylgtv 0.5.4 wraps callback results
-    # itself (create_task in the teardown closeout, gather on push), so a
-    # Task-returning callback would make the library's create_task raise.
-    await client.register_state_update_callback(coordinator.async_handle_update)
-
     # No async_config_entry_first_refresh here (AC-15): this is a push
     # coordinator — the library callback populates state and the 10 s
     # interval only supervises the connection. A first refresh would fail
     # the entry when the TV is off, which this integration tolerates.
-    with suppress(*BSCP_CONNECTION_EXCEPTIONS):
-        try:
-            await asyncio.wait_for(client.connect(), timeout=RECONNECT_TIMEOUT)
-        except PyLGTVPairException as err:
-            raise ConfigEntryAuthFailed(
-                translation_domain=DOMAIN,
-                translation_key="auth_failed",
-                translation_placeholders={"device": entry.title},
-            ) from err
+    #
+    # Connect with the webOS 26 manifest fallback: the callback is
+    # (re)registered by the helper on every candidate before it connects,
+    # and a silently rejected registration is caught by a real request.
+    connected = False
+    try:
+        client = await async_connect_with_manifest_fallback(
+            client,
+            make_unsigned=lambda: coordinator._async_make_client(  # noqa: SLF001
+                unsigned_manifest=True
+            ),
+            connect_timeout=RECONNECT_TIMEOUT,
+            prepare=coordinator._async_prepare_client,  # noqa: SLF001
+        )
+    except PyLGTVPairException as err:
+        raise ConfigEntryAuthFailed(
+            translation_domain=DOMAIN,
+            translation_key="auth_failed",
+            translation_placeholders={"device": entry.title},
+        ) from err
+    except BSCP_CONNECTION_EXCEPTIONS:
+        LOGGER.debug("TV unreachable during setup; entities will show unavailable")
+    else:
+        connected = True
 
-    if client.is_connected():
+    if connected:
+        coordinator.client = client
         # Lazy v1 -> v2 unique_id fix (bounded hello probe, MAC fallback).
         await _async_update_unique_id(hass, entry, client)
         update_client_key(hass, entry, client)

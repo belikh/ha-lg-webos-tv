@@ -18,6 +18,8 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from bscpylgtv.exceptions import PyLGTVCmdError, PyLGTVPairException
+from bscpylgtv.manifest import MANIFEST
 
 # Make the repo root importable so ``import custom_components.bscpylgtv``
 # (and the bscpylgtv library) resolve when pytest runs from anywhere.
@@ -72,6 +74,11 @@ class TVSimulator:
         # answers the hello message, so a client built with
         # get_hello_info=True hangs until its caller's timeout.
         self.hello_broken = False
+        # webOS 26 behaviour (firmware 43.x): the legacy signed manifest is
+        # blacklisted. Pairing (no key) is rejected outright; a registration
+        # with a stored key is rejected while the library still reports a
+        # connection, so the dead link only shows up on the next request.
+        self.manifest_rejected = False
         self.picture_settings: dict[str, Any] = {
             "backlight": 50,
             "contrast": 80,
@@ -177,6 +184,10 @@ class MockWebOsClient:
         # Constructor kwargs captured for factory assertions (AD-2).
         self.init_kwargs: dict[str, Any] = kwargs
         self._connected = False
+        # Registration manifest (library default; factories swap in the
+        # merged unsigned one on the webOS 26 retry).
+        self.manifest: dict[str, Any] = dict(MANIFEST)
+        self._rejected_registration = False
         # The library stores its connect task here; release_client()
         # cancels it when abandoning a zombie. The mock keeps it simple.
         self.connect_task: asyncio.Future[None] | None = None
@@ -272,6 +283,20 @@ class MockWebOsClient:
             # integration's bounded probe sees TimeoutError.
             self._connected = False
             raise TimeoutError("hello probe")
+        if self.tv.manifest_rejected and "signed" in self.manifest:
+            if self.client_key is None:
+                # Pairing: the TV's error frame is discarded by the library
+                # and surfaces as the generic pair error.
+                self._connected = False
+                raise PyLGTVPairException("Unable to pair")
+            # Stored key: the library ignores the error frame, proceeds,
+            # and reports a connection over a dead registration — only the
+            # next real request fails.
+            self._rejected_registration = True
+            self.get_power_state = AsyncMock(
+                side_effect=PyLGTVCmdError("401 insufficient permissions")
+            )
+            return
         for callback in list(self.state_update_callbacks):
             await callback(self)
 

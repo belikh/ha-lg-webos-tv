@@ -254,6 +254,14 @@ data:
   On webOS 25 sets (LG C3/C5 and similar) v2.0.2 fixes pairing entirely:
   earlier versions never showed the prompt because the TV ignores the
   library's `hello` handshake (issue #11).
+- **webOS 26 sets (firmware 43.x) reject pairing, or an existing setup
+  stopped working after a firmware update** — LG blacklists the legacy
+  signed manifest and invalidates old pairing keys on these sets. v2.0.3
+  detects the rejection and reconnects with an unsigned manifest
+  automatically. If the TV invalidated the old key, use the
+  reauthentication flow (or remove and re-add the integration) once; the
+  re-pair uses the same fallback. This is a different firmware behaviour
+  from the webOS 25 `hello` bug fixed in v2.0.2.
 - **TV shows unavailable** — the TV is likely off or unreachable. With a known
   MAC address the entities show *off* instead of *unavailable* and `turn_on`
   wakes it. Wake timing varies: on a tested OLED48CXPTA the TV needed a
