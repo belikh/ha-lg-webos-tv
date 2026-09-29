@@ -114,7 +114,9 @@ async def test_callback_registered_before_connect(
         entry = build_mock_config_entry(hass, host=tv.host)
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-    assert entry.runtime_data.state_update_task in tv.clients[0].state_update_callbacks
+    assert (
+        entry.runtime_data.async_handle_update in tv.clients[0].state_update_callbacks
+    )
 
 
 async def test_no_first_refresh_push_coordinator(
@@ -375,3 +377,51 @@ async def test_uuid_unique_id_untouched(hass: HomeAssistant, tv: TVSimulator) ->
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
     assert entry.unique_id == tv.device_uuid
+
+
+async def test_lazy_unique_id_ip_to_mac_when_hello_broken(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """webOS 25 never answers hello: the MAC becomes the migrated id (#11)."""
+    tv.hello_broken = True
+    with patch_client_factory(tv):
+        entry = build_mock_config_entry(hass, host=tv.host, unique_id=tv.host)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.unique_id == tv.mac
+
+
+async def test_lazy_unique_id_rewrites_entity_registry(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Migrating the entry id rewrites derived entity ids in place.
+
+    Regression test for the duplicate entities reported after the v2
+    upgrade (issue #9 follow-up): the media_player entity already exists
+    in the registry under the legacy IP-shaped unique_id; after migration
+    the same registry entry must carry the new id and keep its entity_id,
+    instead of a second entity being registered alongside it.
+    """
+    from homeassistant.helpers import entity_registry as er
+
+    tv.hello_broken = True  # force the MAC migration path
+    with patch_client_factory(tv):
+        entry = build_mock_config_entry(hass, host=tv.host, unique_id=tv.host)
+        registry = er.async_get(hass)
+        legacy_entity_id = registry.async_get_or_create(
+            "media_player", DOMAIN, tv.host, config_entry=entry
+        ).entity_id
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.unique_id == tv.mac
+    assert registry.async_get_entity_id("media_player", DOMAIN, tv.mac) == (
+        legacy_entity_id
+    )
+    assert registry.async_get_entity_id("media_player", DOMAIN, tv.host) is None
+    media_players = [
+        e
+        for e in registry.entities.values()
+        if e.platform == DOMAIN and e.domain == "media_player"
+    ]
+    assert len(media_players) == 1

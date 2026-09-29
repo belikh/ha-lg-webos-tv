@@ -16,6 +16,9 @@ from custom_components.bscpylgtv.diagnostics import (
 from .conftest import TVSimulator, build_mock_config_entry, patch_client_factory
 
 # Every key that must never survive redaction (plan AD-18 superset).
+# deviceUUID is absent from the runtime snapshot on purpose: hello is
+# only requested by the bounded probe (webOS 25 blocks on it — issue
+# #11), so the runtime client never carries a hello payload.
 MANDATORY_REDACTED_KEYS = (
     "client_key",
     "host",
@@ -23,7 +26,6 @@ MANDATORY_REDACTED_KEYS = (
     "ip_address",
     "unique_id",
     "device_id",
-    "deviceUUID",
     "macAddress",
     "icon",
     "largeIcon",
@@ -72,7 +74,7 @@ def _seed_sensitive_payloads(tv: TVSimulator) -> None:
 async def test_diagnostics_redacts_every_sensitive_key(
     hass: HomeAssistant, tv: TVSimulator
 ) -> None:
-    """Loaded entry: all 12 keys redacted; lists reduced to counts."""
+    """Loaded entry: all sensitive keys redacted; lists reduced to counts."""
     _seed_sensitive_payloads(tv)
     with patch_client_factory(tv):
         entry = build_mock_config_entry(
@@ -95,6 +97,8 @@ async def test_diagnostics_redacts_every_sensitive_key(
     assert set(MANDATORY_REDACTED_KEYS) <= TO_REDACT
 
     client = diagnostics["client"]
+    # hello is not requested at runtime: no UUID can leak into the snapshot.
+    assert client["hello_info"] is None
     # Lists appear ONLY as counts.
     for listed, counted in (
         ("apps", "apps_count"),

@@ -50,10 +50,13 @@ from .const import (
 )
 from .coordinator import (
     BscpylgtvConfigEntry,
+    async_probe_device_uuid,
+    extract_mac,
     make_pairing_client,
     make_runtime_client,
     release_client,
 )
+from .migration import async_migrate_entity_unique_ids
 
 # PROMPT pairing waits for a human at the TV: generous, but finite.
 _PAIRING_TIMEOUT = 60
@@ -71,14 +74,6 @@ def _is_legacy_unique_id(unique_id: str) -> bool:
     locally because that helper is private to its owning module.
     """
     return "." in unique_id or ":" in unique_id
-
-
-def _extract_mac(software_info: Mapping[str, Any] | None) -> str | None:
-    """Return software_info["device_id"] when it is a valid MAC."""
-    device_id = (software_info or {}).get("device_id")
-    if isinstance(device_id, str) and _MAC_PATTERN.fullmatch(device_id):
-        return device_id
-    return None
 
 
 def _get_sources(apps: Mapping[str, Any], inputs: Mapping[str, Any]) -> list[str]:
@@ -168,9 +163,19 @@ class _PairingResult(NamedTuple):
     """Values captured from a freshly paired client."""
 
     client_key: str | None
-    device_uuid: str
+    device_uuid: str | None
     mac: str | None
     title: str
+
+    def unique_id(self, fallback_host: str) -> str:
+        """Return the identity for the entry unique_id.
+
+        Preference order mirrors the v2 design: the hello ``deviceUUID``
+        when the TV answers, then the software-info MAC (stable across
+        DHCP changes), then the host as a last resort. webOS 25 sets never
+        answer hello, so they land on the MAC (belikh/ha-lg-webos-tv#11).
+        """
+        return self.device_uuid or self.mac or fallback_host
 
 
 async def _async_capture_pairing_result(client: WebOsClient) -> _PairingResult:
@@ -178,7 +183,9 @@ async def _async_capture_pairing_result(client: WebOsClient) -> _PairingResult:
 
     The pairing client subscribes to no states, so system/software info
     are fetched explicitly (best effort — a failing fetch degrades to
-    the default title and no MAC instead of failing the pairing).
+    the default title and no MAC instead of failing the pairing). The
+    hello UUID is usually absent because pairing deliberately skips
+    hello; the caller resolves it with the bounded probe instead.
     """
     system_info = await _async_best_effort(client.get_system_info)
     software_info = await _async_best_effort(client.get_software_info)
@@ -187,16 +194,29 @@ async def _async_capture_pairing_result(client: WebOsClient) -> _PairingResult:
     if model_name := (system_info or {}).get("modelName"):
         title = f"{DEFAULT_NAME} {model_name}"
     await _async_disconnect(client)
-    if not device_uuid:
-        # connect() validated the hello handshake, so a missing UUID
-        # means the pairing exchange was not trustworthy after all.
-        raise PyLGTVPairException("TV did not provide a device UUID")
     return _PairingResult(
         client_key=client.client_key,
-        device_uuid=device_uuid,
-        mac=_extract_mac(software_info),
+        device_uuid=device_uuid if isinstance(device_uuid, str) else None,
+        mac=extract_mac(software_info),
         title=title,
     )
+
+
+async def _async_resolve_identity(
+    hass: HomeAssistant, host: str, result: _PairingResult
+) -> _PairingResult:
+    """Fill in a missing ``device_uuid`` with the bounded hello probe.
+
+    Silent by design: the probe reconnects with the freshly stored key,
+    so no pairing prompt is involved and webOS 25 sets simply time out
+    and keep their MAC fallback.
+    """
+    if result.device_uuid or not result.client_key:
+        return result
+    device_uuid = await async_probe_device_uuid(hass, host, result.client_key)
+    if device_uuid:
+        return result._replace(device_uuid=device_uuid)
+    return result
 
 
 class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -243,13 +263,14 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 client = await _async_pair(self.hass, self._host)
                 result = await _async_capture_pairing_result(client)
+                result = await _async_resolve_identity(self.hass, self._host, result)
             except PyLGTVPairException:
                 errors["base"] = "error_pairing"
             except BSCP_CONNECTION_EXCEPTIONS:
                 errors["base"] = "cannot_connect"
             else:
                 await self.async_set_unique_id(
-                    result.device_uuid, raise_on_progress=False
+                    result.unique_id(self._host), raise_on_progress=False
                 )
                 self._abort_if_unique_id_configured({CONF_HOST: self._host})
                 if not self._name:
@@ -343,16 +364,18 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
                     host, reconfigure_entry.data.get(CONF_CLIENT_KEY)
                 )
                 result = await _async_capture_pairing_result(client)
+                result = await _async_resolve_identity(self.hass, host, result)
             except PyLGTVPairException:
                 errors["base"] = "error_pairing"
             except BSCP_CONNECTION_EXCEPTIONS:
                 errors["base"] = "cannot_connect"
             else:
-                await self.async_set_unique_id(result.device_uuid)
+                identity = result.unique_id(host)
+                await self.async_set_unique_id(identity)
                 stored_unique_id = reconfigure_entry.unique_id
                 if (
                     stored_unique_id is not None
-                    and stored_unique_id != result.device_uuid
+                    and stored_unique_id != identity
                     and not _is_legacy_unique_id(stored_unique_id)
                 ):
                     self._abort_if_unique_id_mismatch(reason="wrong_device")
@@ -362,12 +385,22 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
                     result.mac,
                     reconfigure_entry.data.get(CONF_MAC),
                 )
-                if stored_unique_id != result.device_uuid:
+                if stored_unique_id != identity:
                     # None or a legacy v1 IP-based unique_id: adopt the
-                    # device UUID instead of keeping an unmigratable id.
+                    # resolved device identity instead of keeping an
+                    # unmigratable id. Entity registry ids derived from the
+                    # old id are rewritten in place so the TV keeps its
+                    # entities instead of gaining a duplicate set.
+                    if stored_unique_id is not None:
+                        async_migrate_entity_unique_ids(
+                            self.hass,
+                            reconfigure_entry.entry_id,
+                            stored_unique_id,
+                            identity,
+                        )
                     return self.async_update_reload_and_abort(
                         reconfigure_entry,
-                        unique_id=result.device_uuid,
+                        unique_id=identity,
                         data=data,
                     )
                 return self.async_update_reload_and_abort(reconfigure_entry, data=data)

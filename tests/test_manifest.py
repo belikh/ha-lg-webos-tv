@@ -18,12 +18,12 @@ MANIFEST: dict[str, Any] = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")
 
 def test_domain_and_version() -> None:
     assert MANIFEST["domain"] == "bscpylgtv"
-    assert MANIFEST["version"] == "2.0.1"
+    assert MANIFEST["version"] == "2.0.2"
     assert MANIFEST["name"] == "LG WebOS TV (bscpylgtv)"
 
 
 def test_requirements_pin_library() -> None:
-    assert MANIFEST["requirements"] == ["bscpylgtv==0.5.3"]
+    assert MANIFEST["requirements"] == ["bscpylgtv==0.5.4"]
 
 
 def test_ownership_and_docs_urls() -> None:

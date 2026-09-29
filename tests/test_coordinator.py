@@ -123,7 +123,7 @@ async def test_watchdog_reconnects_after_drop(
         assert new_client is not old_client
         assert new_client.is_connected()
         # Callback re-registered on the FRESH client before it connected.
-        assert coordinator.state_update_task in new_client.state_update_callbacks
+        assert coordinator.async_handle_update in new_client.state_update_callbacks
         # And the new push path works end to end.
         tv.volume = 55
         tv.push_update()
@@ -328,40 +328,32 @@ def test_release_client_cancels_task(tv: TVSimulator) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_state_update_callback_returns_task(
+async def test_state_update_callback_is_plain_coroutine(
     hass: HomeAssistant, tv: TVSimulator
 ) -> None:
-    """The registered callback returns a Task, never a coroutine.
+    """The registered callback must return a coroutine, never a Task.
 
-    bscpylgtv's connect_handler teardown collects ``callback(self)``
-    results into a set and passes it to ``asyncio.wait`` — raw
-    coroutines make wait() raise TypeError on Python 3.11+, killing
-    disconnect()/unload (observed on real hardware; found while
-    validating the issue-#9 fixes). A Task works at every call site.
+    bscpylgtv 0.5.4 wraps every callback result itself
+    (``asyncio.create_task`` in the teardown closeout, ``asyncio.gather``
+    on push), so a Task-returning callback — the 0.5.3-era workaround for
+    the ``asyncio.wait`` coroutine rejection — now makes the library's
+    ``create_task`` raise TypeError and kills teardown.
     """
     async with scenario(hass, tv) as coordinator:
-        result = coordinator.state_update_task(tv.clients[0])
-        assert isinstance(result, asyncio.Task)
+        result = coordinator.async_handle_update(tv.clients[0])
+        assert asyncio.iscoroutine(result)
         # Completes exception-free (async_handle_update is shielded).
         await asyncio.wait_for(result, timeout=5)
 
 
-async def test_teardown_closeout_is_wait_safe(
+async def test_teardown_closeout_wraps_callback_result(
     hass: HomeAssistant, tv: TVSimulator
 ) -> None:
-    """The library's closeout pattern (wait over callback results) survives."""
+    """bscpylgtv 0.5.4's closeout pattern (create_task per callback) survives."""
     async with scenario(hass, tv) as coordinator:
         client = tv.clients[0]
-        closeout = {coordinator.state_update_task(client)}
+        # Exactly what the library's connect_handler teardown does in 0.5.4.
+        closeout = {asyncio.create_task(coordinator.async_handle_update(client))}
         done, pending = await asyncio.wait(closeout, timeout=5)
         assert pending == set()
         assert done == closeout
-
-        # Contrast: what the library would do with a plain async
-        # callback — exactly the crash observed on real hardware
-        # (asyncio.wait rejects raw coroutines on Python 3.11+).
-        async def raw(_client: Any) -> None:
-            pass
-
-        with pytest.raises(TypeError):
-            await asyncio.wait({raw(client)}, timeout=5)

@@ -157,21 +157,63 @@ async def test_user_flow_cannot_connect(
     assert result["errors"] == {"base": "cannot_connect"}
 
 
-async def test_user_flow_missing_device_uuid(
+async def test_user_flow_hello_broken_uses_mac(
     hass: HomeAssistant, tv: TVSimulator
 ) -> None:
-    """A hello without deviceUUID is not trustworthy: error_pairing."""
-    tv.hello_info = {}
-    client = tv.create_client(HOST, client_key="fresh-key")
-    client._connected = True  # noqa: SLF001
+    """webOS 25 never answers hello: pairing succeeds with the MAC identity.
+
+    Regression test for issue #11 — with hello requested, the pairing
+    connect hangs before registration, the TV never shows the prompt and
+    the flow times out. The pairing client now skips hello and the
+    bounded UUID probe degrades to None; the MAC becomes the identity.
+    """
+    tv.hello_broken = True
+    client = tv.create_client(HOST, client_key=None)
+
+    async def connect_and_pair() -> None:
+        client._connected = True  # noqa: SLF001 - pair accepted on the TV
+        client.client_key = "fresh-key"
+
+    client.connect = connect_and_pair  # type: ignore[method-assign]
     with patch(
         "custom_components.bscpylgtv.config_flow.make_pairing_client",
         AsyncMock(return_value=client),
     ):
         result = await submit_user_flow(hass)
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
-    assert result["type"] == "form"
-    assert result["errors"] == {"base": "error_pairing"}
+    assert result["type"] == "create_entry"
+    entry = result["result"]
+    assert entry.unique_id == tv.mac
+    assert entry.data == {
+        CONF_HOST: HOST,
+        CONF_CLIENT_KEY: "fresh-key",
+        CONF_MAC: tv.mac,
+    }
+
+
+async def test_user_flow_hello_broken_without_mac_uses_host(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Hello broken and no MAC-shaped device_id: the host is the last resort."""
+    tv.hello_broken = True
+    tv.software_info = {**tv.software_info, "device_id": "webos-device"}
+    client = tv.create_client(HOST, client_key=None)
+
+    async def connect_and_pair() -> None:
+        client._connected = True  # noqa: SLF001 - pair accepted on the TV
+        client.client_key = "fresh-key"
+
+    client.connect = connect_and_pair  # type: ignore[method-assign]
+    with patch(
+        "custom_components.bscpylgtv.config_flow.make_pairing_client",
+        AsyncMock(return_value=client),
+    ):
+        result = await submit_user_flow(hass)
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] == "create_entry"
+    entry = result["result"]
+    assert entry.unique_id == HOST
+    assert CONF_MAC not in entry.data
 
 
 async def test_user_flow_duplicate_host_aborts(hass: HomeAssistant, pair: Any) -> None:
@@ -374,6 +416,43 @@ async def test_reconfigure_adopts_legacy_ip_unique_id(
     assert result["type"] == "abort"
     assert result["reason"] == "reconfigure_successful"
     assert entry.unique_id == UUID
+
+
+async def test_reconfigure_adopts_legacy_id_rewrites_entities(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Reconfigure adopts a legacy id and rewrites derived entity ids.
+
+    Without the rewrite the reload would register a second set of
+    entities next to the IP-keyed registry entries — the duplicate
+    entities reported after the v2 upgrade (issue #9 follow-up).
+    """
+    from homeassistant.helpers import entity_registry as er
+
+    entry = build_mock_config_entry(
+        hass, host="192.168.1.99", client_key="stored-key", unique_id="192.168.1.99"
+    )
+    registry = er.async_get(hass)
+    legacy_entity_id = registry.async_get_or_create(
+        "media_player", DOMAIN, "192.168.1.99", config_entry=entry
+    ).entity_id
+    client = _runtime_client(tv)
+    with patch(
+        "custom_components.bscpylgtv.config_flow.make_runtime_client",
+        AsyncMock(return_value=client),
+    ):
+        result = await _start_reconfigure(hass, entry)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: HOST}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] == "abort"
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.unique_id == UUID
+    assert (
+        registry.async_get_entity_id("media_player", DOMAIN, UUID) == legacy_entity_id
+    )
+    assert registry.async_get_entity_id("media_player", DOMAIN, "192.168.1.99") is None
 
 
 async def test_reconfigure_stale_key_repair(

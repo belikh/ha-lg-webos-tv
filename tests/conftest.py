@@ -68,6 +68,10 @@ class TVSimulator:
             "minor_ver": "30.15",
         }
         self.hello_info = {"deviceUUID": self.device_uuid}
+        # webOS 25 behaviour (belikh/ha-lg-webos-tv#11): the TV never
+        # answers the hello message, so a client built with
+        # get_hello_info=True hangs until its caller's timeout.
+        self.hello_broken = False
         self.picture_settings: dict[str, Any] = {
             "backlight": 50,
             "contrast": 80,
@@ -263,6 +267,11 @@ class MockWebOsClient:
         if (exc := self.tv.connect_exception) is not None:
             self._connected = False
             raise exc
+        if self.init_kwargs.get("get_hello_info") and self.tv.hello_broken:
+            # The library blocks on recv() after sending hello, so the
+            # integration's bounded probe sees TimeoutError.
+            self._connected = False
+            raise TimeoutError("hello probe")
         for callback in list(self.state_update_callbacks):
             await callback(self)
 
@@ -352,8 +361,14 @@ class MockWebOsClient:
         return self.tv.software_info
 
     @property
-    def hello_info(self) -> dict[str, Any]:
-        """Return the handshake hello info."""
+    def hello_info(self) -> dict[str, Any] | None:
+        """Return the handshake hello info, like the library.
+
+        The library only populates it when the client was constructed
+        with ``get_hello_info=True``; otherwise the attribute stays None.
+        """
+        if not self.init_kwargs.get("get_hello_info"):
+            return None
         return self.tv.hello_info
 
     @property
@@ -409,11 +424,16 @@ def _stub_ssdp_setup():
     The manifest declares ``dependencies: ["ssdp"]``; PHACC forbids real
     socket use. Discovery behavior is tested directly against
     ``async_step_ssdp`` with a SsdpServiceInfo, so the component itself
-    never needs to run.
+    never needs to run. Importing the module first is required on
+    Home Assistant 2026.9: it is no longer imported as a side effect of
+    component loading, and ``patch()`` cannot resolve an unimported
+    submodule by name.
     """
     from unittest.mock import patch
 
-    with patch("homeassistant.components.ssdp.async_setup", return_value=True):
+    from homeassistant.components import ssdp as ssdp_component
+
+    with patch.object(ssdp_component, "async_setup", return_value=True):
         yield
 
 

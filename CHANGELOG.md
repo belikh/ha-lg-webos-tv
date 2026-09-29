@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.0.2
+
+### Fixed
+
+*   **Pairing on webOS 25 sets (LG C3/C5 and similar).** These TVs never
+    answer the library's `hello` handshake, so every connect that requested
+    it — pairing and runtime alike — blocked until the caller's timeout and
+    the TV never showed a pairing prompt (issue #11). The integration no
+    longer requests hello during pairing or normal operation. The device
+    UUID is recovered afterwards with a bounded, silent probe on the
+    already-registered connection; TVs that ignore hello fall back to the
+    MAC address from software info, and to the host as a last resort.
+*   **Duplicate entities after a v1 → v2 upgrade.** The lazy unique-id
+    migration changed the config-entry id but left the existing entity
+    registry entries under their old IP-shaped ids, so the next setup
+    registered a second set of entities alongside the old ones (the
+    duplicate/triple entities reported after upgrading). Entity registry
+    ids derived from the entry id are now rewritten in place during the
+    migration, keeping entity ids and history intact.
+
+### Changed
+
+*   **`bscpylgtv` 0.5.4** (was 0.5.3): picks up the upstream teardown
+    closeout fix for Python 3.11+. The state-update callback registration
+    is aligned with it (a plain coroutine function; the library now wraps
+    callback results itself).
+
 ## 2.0.1
 
 ### Fixed

@@ -81,6 +81,12 @@ COMMAND_TIMEOUT = 8
 RECONNECT_TIMEOUT = 15
 DISCONNECT_TIMEOUT = 2
 
+# Bounded hello probe (belikh/ha-lg-webos-tv#11). bscpylgtv's hello message
+# predates webOS 25, which ignores it outright, so any connect that requests
+# hello hangs until the caller's timeout. A hello-capable TV answers in
+# milliseconds; this budget only bounds the probe, never the pairing prompt.
+HELLO_PROBE_TIMEOUT = 5
+
 # UDP port for in-integration wake-on-lan magic packets (AD-8).
 WOL_PORT = 9
 

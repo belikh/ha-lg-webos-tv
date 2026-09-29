@@ -251,6 +251,9 @@ data:
 - **Pairing fails or loops** — make sure the TV is on and you accept the
   prompt within the timeout. If the TV keeps rejecting a stale key, start the
   reauthentication flow from the integration's page; it re-pairs from scratch.
+  On webOS 25 sets (LG C3/C5 and similar) v2.0.2 fixes pairing entirely:
+  earlier versions never showed the prompt because the TV ignores the
+  library's `hello` handshake (issue #11).
 - **TV shows unavailable** — the TV is likely off or unreachable. With a known
   MAC address the entities show *off* instead of *unavailable* and `turn_on`
   wakes it. Wake timing varies: on a tested OLED48CXPTA the TV needed a

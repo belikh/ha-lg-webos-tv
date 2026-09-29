@@ -11,7 +11,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_MAC, EVENT_HOMEASSISTANT_STOP
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
@@ -33,11 +33,14 @@ from .const import (
 from .coordinator import (
     BscpylgtvConfigEntry,
     BscpylgtvCoordinator,
+    async_probe_device_uuid,
+    extract_mac,
     make_runtime_client,
     release_client,
     update_client_key,
     update_mac_address,
 )
+from .migration import async_migrate_entity_unique_ids
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -80,30 +83,41 @@ def _needs_unique_id_fix(unique_id: str | None) -> bool:
     )
 
 
-@callback
-def _async_update_unique_id(
+async def _async_update_unique_id(
     hass: HomeAssistant, entry: BscpylgtvConfigEntry, client: WebOsClient
 ) -> None:
-    """Lazily migrate a v1 IP-based unique_id to the device UUID (plan §7).
+    """Lazily migrate a v1 IP-based unique_id to the device identity (plan §7).
 
-    Not migratable offline: it requires a live hello payload. Runs before
-    platforms are forwarded so entities and the device registry bind to the
-    UUID from the start of v2 life. Guarded against duplicates (R-11).
+    Runs before platforms are forwarded so entities and the device registry
+    bind to the new identity from the start of v2 life. The hello
+    ``deviceUUID`` is probed with a bounded, silent round-trip (webOS 25 sets
+    never answer hello — belikh/ha-lg-webos-tv#11), falling back to the MAC
+    from software_info. Entity registry ids derived from the old entry id
+    are rewritten in the same pass so the TV keeps its entities instead of
+    gaining a duplicate set. Guarded against duplicate entries (R-11).
     """
-    device_uuid = (client.hello_info or {}).get("deviceUUID")
-    if not device_uuid or not _needs_unique_id_fix(entry.unique_id):
+    old_unique_id = entry.unique_id
+    if old_unique_id is None or not _needs_unique_id_fix(old_unique_id):
+        return
+    new_unique_id = await async_probe_device_uuid(
+        hass, entry.data[CONF_HOST], entry.data.get(CONF_CLIENT_KEY)
+    )
+    if not new_unique_id:
+        new_unique_id = extract_mac(client.software_info)
+    if not new_unique_id or new_unique_id == old_unique_id:
         return
     for other in hass.config_entries.async_entries(DOMAIN):
-        if other.entry_id != entry.entry_id and other.unique_id == device_uuid:
+        if other.entry_id != entry.entry_id and other.unique_id == new_unique_id:
             LOGGER.warning(
                 "Cannot update unique_id for %s: another entry already uses"
                 " %s; remove the duplicate entry to resolve this",
                 entry.title,
-                device_uuid,
+                new_unique_id,
             )
             return
+    async_migrate_entity_unique_ids(hass, entry.entry_id, old_unique_id, new_unique_id)
     try:
-        hass.config_entries.async_update_entry(entry, unique_id=device_uuid)
+        hass.config_entries.async_update_entry(entry, unique_id=new_unique_id)
     except HomeAssistantError, ValueError:
         LOGGER.warning(
             "Failed to update unique_id for %s; keeping existing value",
@@ -213,10 +227,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
     # Register the push callback BEFORE connect: connect fires callbacks at
     # the end of a successful handshake, and the library clears the callback
     # list on teardown, so every fresh client must re-register (AD-2).
-    # state_update_task (not async_handle_update): the library's teardown
-    # closeout feeds callback results to asyncio.wait, which rejects raw
-    # coroutines on Python 3.11+ and would kill disconnect()/unload.
-    await client.register_state_update_callback(coordinator.state_update_task)
+    # Plain coroutine function: bscpylgtv 0.5.4 wraps callback results
+    # itself (create_task in the teardown closeout, gather on push), so a
+    # Task-returning callback would make the library's create_task raise.
+    await client.register_state_update_callback(coordinator.async_handle_update)
 
     # No async_config_entry_first_refresh here (AC-15): this is a push
     # coordinator — the library callback populates state and the 10 s
@@ -233,8 +247,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
             ) from err
 
     if client.is_connected():
-        # Lazy v1 -> v2 unique_id fix needs a live hello (deviceUUID).
-        _async_update_unique_id(hass, entry, client)
+        # Lazy v1 -> v2 unique_id fix (bounded hello probe, MAC fallback).
+        await _async_update_unique_id(hass, entry, client)
         update_client_key(hass, entry, client)
         update_mac_address(hass, entry, client)
 

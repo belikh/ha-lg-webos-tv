@@ -21,6 +21,8 @@ import asyncio
 import base64
 import functools
 import re
+from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +44,9 @@ from .const import (
     CONF_CLIENT_KEY,
     CONF_MAC,
     DEFAULT_STATES,
+    DISCONNECT_TIMEOUT,
     DOMAIN,
+    HELLO_PROBE_TIMEOUT,
     LOGGER,
     PROBE_TIMEOUT,
     RECONNECT_TIMEOUT,
@@ -52,14 +56,24 @@ from .key_storage import InMemoryKeyStorage
 
 
 async def make_runtime_client(
-    hass: HomeAssistant, host: str, client_key: str | None
+    hass: HomeAssistant,
+    host: str,
+    client_key: str | None,
+    *,
+    get_hello_info: bool = False,
+    states: list[str] | None = None,
 ) -> WebOsClient:
-    """Build a runtime client with the AD-2 kwargs.
+    """Build a client with the AD-2 kwargs.
 
     The constructor builds an SSL context (blocking I/O), so it always
     runs in an executor. ``InMemoryKeyStorage`` is always injected: the
     library writes freshly paired keys through ``storage.set_key`` during
     registration and would raise ``AttributeError`` without it.
+
+    ``get_hello_info`` defaults to False: on webOS 25 the hello message is
+    never answered and blocks connect() until the caller's timeout
+    (belikh/ha-lg-webos-tv#11). Only the bounded UUID probe asks for it.
+    ``states`` must be a list — the library treats any other type as empty.
     """
     return await hass.async_add_executor_job(
         functools.partial(
@@ -71,8 +85,8 @@ async def make_runtime_client(
             connect_retry_attempts=1,
             ping_interval=10,
             volume_step_delay_ms=100,
-            get_hello_info=True,
-            states=DEFAULT_STATES,
+            get_hello_info=get_hello_info,
+            states=DEFAULT_STATES if states is None else states,
         )
     )
 
@@ -83,7 +97,10 @@ async def make_pairing_client(hass: HomeAssistant, host: str) -> WebOsClient:
     Consumed read-only by the config flow (Cluster B): empty storage (the
     library stores the new key there and exposes it as ``client.client_key``),
     PROMPT pairing (never PIN — the PIN path does blocking ``input()``), no
-    state subscriptions, hello info requested for the device UUID.
+    state subscriptions and NO hello: requesting hello hangs pairing on
+    webOS 25 before registration is ever sent, so the TV never shows the
+    prompt (belikh/ha-lg-webos-tv#11). The device UUID is recovered after
+    pairing with the bounded, silent probe in ``async_probe_device_uuid``.
     """
     return await hass.async_add_executor_job(
         functools.partial(
@@ -94,9 +111,40 @@ async def make_pairing_client(hass: HomeAssistant, host: str) -> WebOsClient:
             timeout_connect=10,
             connect_retry_attempts=1,
             states=[],
-            get_hello_info=True,
+            get_hello_info=False,
         )
     )
+
+
+async def async_probe_device_uuid(
+    hass: HomeAssistant, host: str, client_key: str | None
+) -> str | None:
+    """Return the hello ``deviceUUID`` for a paired TV, or None.
+
+    Runs a second, strongly bounded connection that is already registered
+    with the stored key, so the TV never shows a pairing prompt. TVs that
+    answer the hello handshake return the UUID in milliseconds; webOS 25
+    sets ignore hello entirely (belikh/ha-lg-webos-tv#11), in which case
+    the timeout degrades to None and callers fall back to the MAC address.
+    Never raises: the UUID is optional enrichment.
+    """
+    if not client_key:
+        return None
+    client = await make_runtime_client(
+        hass, host, client_key, get_hello_info=True, states=[]
+    )
+    try:
+        await asyncio.wait_for(client.connect(), HELLO_PROBE_TIMEOUT)
+    except Exception:  # noqa: BLE001 - optional enrichment only
+        release_client(client)
+        return None
+    device_uuid = (client.hello_info or {}).get("deviceUUID")
+    client.clear_state_update_callbacks()
+    with suppress(Exception):
+        await asyncio.wait_for(client.disconnect(), DISCONNECT_TIMEOUT)
+    if isinstance(device_uuid, str) and device_uuid:
+        return device_uuid
+    return None
 
 
 def release_client(client: WebOsClient | None) -> None:
@@ -127,17 +175,26 @@ def update_client_key(
 _MAC_PATTERN = re.compile(r"^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
 
+def extract_mac(software_info: Mapping[str, Any] | None) -> str | None:
+    """Return ``software_info['device_id']`` when it is a valid MAC.
+
+    Shared by the config flow (identity fallback) and the coordinator
+    (wake-on-LAN self-heal). Not every set reports a MAC here; anything
+    that does not match the pattern is treated as absent.
+    """
+    device_id = (software_info or {}).get("device_id")
+    if isinstance(device_id, str) and _MAC_PATTERN.fullmatch(device_id):
+        return device_id
+    return None
+
+
 @callback
 def update_mac_address(
     hass: HomeAssistant, entry: BscpylgtvConfigEntry, client: WebOsClient
 ) -> None:
     """Self-heal the wake-on-LAN MAC from ``software_info['device_id']``."""
-    device_id = (client.software_info or {}).get("device_id")
-    if (
-        device_id
-        and _MAC_PATTERN.fullmatch(device_id)
-        and device_id != entry.data.get(CONF_MAC)
-    ):
+    device_id = extract_mac(client.software_info)
+    if device_id and device_id != entry.data.get(CONF_MAC):
         LOGGER.debug("Updating MAC address for host %s", entry.data[CONF_HOST])
         hass.config_entries.async_update_entry(
             entry, data={**entry.data, CONF_MAC: device_id}
@@ -171,25 +228,15 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
         """Whether a wake-on-LAN path exists (gates TURN_ON, AD-8)."""
         return self.config_entry.data.get(CONF_MAC) is not None
 
-    def state_update_task(self, client: WebOsClient) -> asyncio.Task[None]:
-        """Schedule one push update and return the Task — never a coroutine.
-
-        bscpylgtv invokes state-update callbacks in three places: an
-        immediate ``await callback(self)`` on registration and
-        ``asyncio.gather`` on every push (both accept coroutines and
-        Tasks), and the ``connect_handler`` teardown closeout, which
-        collects ``callback(self)`` results into a set and hands it to
-        ``asyncio.wait``. Raw coroutines make ``asyncio.wait`` raise
-        ``TypeError("Passing coroutines is forbidden")`` on Python
-        3.11+, which kills the library's teardown: ``disconnect()``
-        dies mid-call and the client never cleans up (observed on real
-        hardware; upstream fix pending chros73/bscpylgtv PR). Returning
-        a Task keeps every call site working on all supported Pythons.
-        """
-        return asyncio.get_running_loop().create_task(self.async_handle_update(client))
-
     async def async_handle_update(self, client: WebOsClient) -> None:
         """Handle a state update pushed by the TV.
+
+        Registered directly as the library callback. bscpylgtv 0.5.4 wraps
+        callback results itself (``asyncio.create_task`` in the teardown
+        closeout, ``asyncio.gather`` on push), so this must stay a plain
+        coroutine function — returning a Task would make the library's
+        ``create_task`` raise. On 0.5.3 the same shape crashed teardown on
+        Python 3.11+; this integration pins 0.5.4.
 
         Exception-shielded: the library's ``callback_handler`` only catches
         ``CancelledError``, so a callback exception would kill the
@@ -228,10 +275,9 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
         self.client = await self._async_make_client()
         # The library clears state_update_callbacks in its teardown, so the
         # callback must be re-registered on every fresh client BEFORE the
-        # connect attempt (plan AD-2). state_update_task (not
-        # async_handle_update): the library's teardown closeout feeds
-        # callback results to asyncio.wait, which rejects raw coroutines.
-        await self.client.register_state_update_callback(self.state_update_task)
+        # connect attempt (plan AD-2). Plain coroutine function: bscpylgtv
+        # 0.5.4 wraps callback results itself (create_task on teardown).
+        await self.client.register_state_update_callback(self.async_handle_update)
         try:
             await asyncio.wait_for(self.client.connect(), RECONNECT_TIMEOUT)
         except PyLGTVPairException as err:
