@@ -309,6 +309,23 @@ device and entities. Optionally also remove the integration files (HACS or
 `custom_components/bscpylgtv`) and restart Home Assistant. Old pairing files
 (`.storage/bscpylgtv_*.sqlite`) from v1 can be deleted manually.
 
+## Development
+
+Tests run against a pinned Home Assistant version with
+[uv](https://docs.astral.sh/uv/):
+
+```bash
+uv sync          # create .venv from uv.lock
+uv run pytest    # 300+ tests
+uv run ruff check custom_components tests
+uv run mypy
+```
+
+`pyproject.toml` carries the dev dependency group (pytest-homeassistant-custom-component,
+bscpylgtv, ruff, mypy) and `uv.lock` pins the full tree, so the suite is
+reproducible. After bumping the `bscpylgtv` pin in `manifest.json`, update the
+dev group and run `uv lock` in the same change.
+
 ## Credits
 
 - **[chros73](https://github.com/chros73)** — author of the

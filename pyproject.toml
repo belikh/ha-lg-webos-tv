@@ -1,5 +1,31 @@
 # Tooling configuration for the bscpylgtv Home Assistant integration repo.
-# This repository is not a package, so no [project] metadata is needed.
+# The [project] table exists only to pin the Python floor for uv; the
+# integration itself is not a package (tool.uv.package = false) and its
+# canonical version lives in custom_components/bscpylgtv/manifest.json.
+[project]
+name = "ha-lg-webos-tv"
+version = "0.0.0"
+description = "LG WebOS TV integration for Home Assistant (HACS custom component)"
+requires-python = ">=3.14.2"
+
+# Reproducible test environment: `uv sync` then `uv run pytest`.
+# pytest-homeassistant-custom-component pins the Home Assistant version the
+# tests run against; async-upnp-client must match the HA ssdp integration's
+# requirement (the test ssdp stub imports the component); bscpylgtv must
+# match the manifest pin.
+[dependency-groups]
+dev = [
+    "bscpylgtv==0.5.4",
+    "pytest-homeassistant-custom-component==0.13.367",
+    "async-upnp-client==0.48.1",
+    "mypy==2.3.1",
+    "ruff==0.16.9",
+]
+
+[tool.uv]
+# The repository is not an installable package: tests import
+# custom_components/ from the working tree.
+package = false
 
 [tool.ruff]
 line-length = 88
