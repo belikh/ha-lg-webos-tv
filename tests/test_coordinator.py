@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from bscpylgtv.exceptions import PyLGTVCmdError, PyLGTVPairException
@@ -17,9 +17,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from custom_components.bscpylgtv.const import SCAN_INTERVAL
+from custom_components.bscpylgtv.const import SCAN_INTERVAL, runtime_states
 from custom_components.bscpylgtv.coordinator import (
     BscpylgtvCoordinator,
+    async_probe_device_uuid,
+    make_pairing_client,
     release_client,
     update_client_key,
     update_mac_address,
@@ -56,6 +58,38 @@ async def test_coordinator_shape(integration: Any) -> None:
     coordinator = integration.coordinator
     assert isinstance(coordinator, BscpylgtvCoordinator)
     assert coordinator.update_interval == SCAN_INTERVAL == timedelta(seconds=10)
+
+
+async def test_pairing_client_uses_empty_states(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Pairing does not subscribe to normal runtime states."""
+    with patch(
+        "custom_components.bscpylgtv.coordinator.WebOsClient",
+        side_effect=lambda *args, **kwargs: tv.create_client(
+            *args, client_key=None, **kwargs
+        ),
+    ) as client_factory:
+        await make_pairing_client(hass, tv.host, unsigned_manifest=True)
+
+    assert client_factory.call_args.kwargs["states"] == []
+    assert client_factory.call_args.kwargs["get_hello_info"] is False
+
+
+async def test_hello_probe_uses_empty_states(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """The UUID probe does not subscribe to normal runtime states."""
+    with patch(
+        "custom_components.bscpylgtv.coordinator.make_runtime_client",
+        AsyncMock(return_value=tv.create_client(tv.host, get_hello_info=True)),
+    ) as make_client:
+        assert (
+            await async_probe_device_uuid(hass, tv.host, "stored-key") == tv.device_uuid
+        )
+
+    assert make_client.await_args.kwargs["states"] == []
+    assert make_client.await_args.kwargs["get_hello_info"] is True
 
 
 async def test_push_callback_updates_entities(
@@ -130,6 +164,38 @@ async def test_watchdog_reconnects_after_drop(
         await hass.async_block_till_done()
         assert hass.states.get(MEDIA_PLAYER).attributes["volume_level"] == 0.55
         assert coordinator.config_entry.state is ConfigEntryState.LOADED
+
+
+async def test_watchdog_reconnects_with_unavailable_software_info(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """The connection remains usable when optional metadata is absent."""
+    tv.software_info = None
+    tv.software_info_rejected = True
+    async with scenario(hass, tv) as coordinator:
+        original_client = coordinator.client
+        assert original_client.software_info is None
+        assert original_client.init_kwargs["states"] == runtime_states(
+            unsigned_manifest=True
+        )
+        assert coordinator.config_entry.data["unsigned_manifest"] is True
+
+        tv.disconnect_all()
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+
+        client = coordinator.client
+        assert client is not original_client
+        assert client.is_connected()
+        assert client.software_info is None
+        assert client.init_kwargs["states"] == runtime_states(unsigned_manifest=True)
+        assert await client.get_power_state() == {
+            "state": "Active",
+            "returnValue": True,
+        }
+        assert client.current_appId == "youtube.2016"
+        assert coordinator.last_update_success
+        assert hass.states.get(MEDIA_PLAYER).state == "on"
 
 
 async def test_zombie_probe_and_swap(hass: HomeAssistant, tv: TVSimulator) -> None:
@@ -250,11 +316,17 @@ async def test_update_mac_address_self_heal(
         update_mac_address(hass, entry, coordinator.client)
         assert entry.data["mac"] == tv.mac
         # A different (valid) MAC overwrites.
-        tv.software_info = {**tv.software_info, "device_id": "11:22:33:44:55:66"}
+        coordinator.client._software_info = {  # noqa: SLF001 - connect cache
+            **tv.software_info,
+            "device_id": "11:22:33:44:55:66",
+        }
         update_mac_address(hass, entry, coordinator.client)
         assert entry.data["mac"] == "11:22:33:44:55:66"
         # Non-MAC device_id values are ignored.
-        tv.software_info = {**tv.software_info, "device_id": "not-a-mac"}
+        coordinator.client._software_info = {  # noqa: SLF001 - connect cache
+            **tv.software_info,
+            "device_id": "not-a-mac",
+        }
         update_mac_address(hass, entry, coordinator.client)
         assert entry.data["mac"] == "11:22:33:44:55:66"
 
@@ -333,7 +405,7 @@ async def test_state_update_callback_is_plain_coroutine(
 ) -> None:
     """The registered callback must return a coroutine, never a Task.
 
-    bscpylgtv 0.5.4 wraps every callback result itself
+    bscpylgtv 0.5.5 wraps every callback result itself
     (``asyncio.create_task`` in the teardown closeout, ``asyncio.gather``
     on push), so a Task-returning callback — the 0.5.3-era workaround for
     the ``asyncio.wait`` coroutine rejection — now makes the library's
@@ -349,10 +421,10 @@ async def test_state_update_callback_is_plain_coroutine(
 async def test_teardown_closeout_wraps_callback_result(
     hass: HomeAssistant, tv: TVSimulator
 ) -> None:
-    """bscpylgtv 0.5.4's closeout pattern (create_task per callback) survives."""
+    """bscpylgtv 0.5.5's closeout pattern (create_task per callback) survives."""
     async with scenario(hass, tv) as coordinator:
         client = tv.clients[0]
-        # Exactly what the library's connect_handler teardown does in 0.5.4.
+        # Exactly what the library's connect_handler teardown does in 0.5.5.
         closeout = {asyncio.create_task(coordinator.async_handle_update(client))}
         done, pending = await asyncio.wait(closeout, timeout=5)
         assert pending == set()

@@ -43,6 +43,7 @@ DEFAULT_NAME = "LG WebOS TV"
 # homeassistant.const; the library pairing key is stored as "client_key"
 # (NOT homeassistant's CONF_CLIENT_SECRET, to match the library field name).
 CONF_CLIENT_KEY = "client_key"
+CONF_UNSIGNED_MANIFEST = "unsigned_manifest"
 CONF_SOURCES = "sources"
 
 # Attributes shared across platforms/services.
@@ -71,6 +72,16 @@ DEFAULT_STATES = [
     "sound_output",
     "picture_settings",
 ]
+
+
+def runtime_states(*, unsigned_manifest: bool) -> list[str]:
+    """Return states compatible with the selected registration manifest."""
+    return [
+        state
+        for state in DEFAULT_STATES
+        if not unsigned_manifest or state != "software_info"
+    ]
+
 
 # Timing constants (lgtv-ha connection.py + lg_oled_control guidance).
 # SCAN_INTERVAL is a supervisory watchdog interval, not a poll: a healthy

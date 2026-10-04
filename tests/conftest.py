@@ -38,6 +38,18 @@ FAKE_JPEG_2 = b"\xff\xd8\xff\xe0OTHERJPEGBYTES"
 FAKE_JPEG_2_B64 = base64.b64encode(FAKE_JPEG_2).decode("ascii")
 
 
+def not_registered_error() -> PyLGTVCmdError:
+    """Return the exact registration error recorded from a webOS 26 TV."""
+    return PyLGTVCmdError(
+        {
+            "type": "error",
+            "id": 1,
+            "error": "401 insufficient permissions (not registered)",
+            "payload": {"returnValue": False},
+        }
+    )
+
+
 class TVSimulator:
     """Shared per-test TV state.
 
@@ -64,11 +76,12 @@ class TVSimulator:
         self.volume = 12
         self.sound_output = "tv_speaker"
         self.system_info = {"modelName": "OLED55C2"}
-        self.software_info = {
+        self.software_info: dict[str, Any] | None = {
             "device_id": self.mac,
             "major_ver": "03",
             "minor_ver": "30.15",
         }
+        self.software_info_rejected = False
         self.hello_info = {"deviceUUID": self.device_uuid}
         # webOS 25 behaviour (belikh/ha-lg-webos-tv#11): the TV never
         # answers the hello message, so a client built with
@@ -79,6 +92,8 @@ class TVSimulator:
         # with a stored key is rejected while the library still reports a
         # connection, so the dead link only shows up on the next request.
         self.manifest_rejected = False
+        # The stored key is no longer registered for either manifest.
+        self.client_key_rejected = False
         self.picture_settings: dict[str, Any] = {
             "backlight": 50,
             "contrast": 80,
@@ -184,6 +199,8 @@ class MockWebOsClient:
         # Constructor kwargs captured for factory assertions (AD-2).
         self.init_kwargs: dict[str, Any] = kwargs
         self._connected = False
+        self._system_info: dict[str, Any] | None = None
+        self._software_info: dict[str, Any] | None = None
         # Registration manifest (library default; factories swap in the
         # merged unsigned one on the webOS 26 retry).
         self.manifest: dict[str, Any] = dict(MANIFEST)
@@ -240,7 +257,13 @@ class MockWebOsClient:
         self.enable_tpc_or_gsr = AsyncMock(return_value=ok)
         # Info fetches (config flow reads these directly)
         self.get_system_info = AsyncMock(return_value=dict(self.tv.system_info))
-        self.get_software_info = AsyncMock(return_value=dict(self.tv.software_info))
+        self.get_software_info = AsyncMock(
+            return_value=(
+                dict(self.tv.software_info)
+                if self.tv.software_info is not None
+                else None
+            )
+        )
         # Media
         self.take_screenshot = AsyncMock(return_value={"image": FAKE_JPEG_B64})
         # Raw SSAP + notify
@@ -283,6 +306,16 @@ class MockWebOsClient:
             # integration's bounded probe sees TimeoutError.
             self._connected = False
             raise TimeoutError("hello probe")
+        if self.tv.client_key_rejected and self.client_key is not None:
+            self._connected = False
+            raise not_registered_error()
+        if (
+            self.tv.software_info_rejected
+            and "software_info" in self.init_kwargs.get("states", [])
+            and "signed" in self.manifest
+        ):
+            self._connected = False
+            raise not_registered_error()
         if self.tv.manifest_rejected and "signed" in self.manifest:
             if self.client_key is None:
                 # Pairing: the TV's error frame is discarded by the library
@@ -293,16 +326,21 @@ class MockWebOsClient:
             # and reports a connection over a dead registration — only the
             # next real request fails.
             self._rejected_registration = True
-            self.get_power_state = AsyncMock(
-                side_effect=PyLGTVCmdError("401 insufficient permissions")
-            )
+            self.get_power_state = AsyncMock(side_effect=not_registered_error())
             return
+        states = self.init_kwargs.get("states", [])
+        if "system_info" in states:
+            self._system_info = dict(self.tv.system_info)
+        if "software_info" in states and self.tv.software_info is not None:
+            self._software_info = dict(self.tv.software_info)
         for callback in list(self.state_update_callbacks):
             await callback(self)
 
     async def disconnect(self) -> None:
         """Disconnect the (healthy) client."""
         self._connected = False
+        self._system_info = None
+        self._software_info = None
 
     def is_connected(self) -> bool:
         """Return whether the connect task is alive."""
@@ -376,14 +414,14 @@ class MockWebOsClient:
         return self.tv.sound_output
 
     @property
-    def system_info(self) -> dict[str, Any]:
-        """Return the subscribed system info."""
-        return self.tv.system_info
+    def system_info(self) -> dict[str, Any] | None:
+        """Return system info cached by connect when requested."""
+        return self._system_info
 
     @property
-    def software_info(self) -> dict[str, Any]:
-        """Return the subscribed software info."""
-        return self.tv.software_info
+    def software_info(self) -> dict[str, Any] | None:
+        """Return software info cached by connect when requested."""
+        return self._software_info
 
     @property
     def hello_info(self) -> dict[str, Any] | None:

@@ -20,7 +20,7 @@ access for power users.
 - **Setup via UI** with SSDP auto-discovery and TV-prompt pairing (no PIN codes).
 - **Push updates** over a supervised websocket connection with automatic
   reconnect and self-healing after TV restarts or network hiccups.
-- **Turn TV on** via Wake-on-LAN (MAC address auto-detected).
+- **Turn TV on** via Wake-on-LAN (automatic MAC detection when available).
 - **Reauth & reconfigure flows** for pairing-key loss and IP/host changes.
 - **Diagnostics** with sensitive data redacted.
 - Entities across media player, remote, notify, button, number, select, sensor
@@ -68,13 +68,16 @@ discovery update it).
 webOS TVs cannot be woken over their websocket API, so turning the TV **on**
 uses a Wake-on-LAN (WOL) magic packet:
 
-- The TV's **MAC address is auto-detected** during pairing and on every
-  successful reconnect — normally you do not have to do anything.
+- The TV's **MAC address is detected automatically** when the TV reports it
+  during pairing or reconnects. Some webOS 26 sets do not provide this
+  information in compatibility mode; an existing or manually entered MAC
+  continues to work.
 - When a MAC address is known, the media player and remote entities offer
   `turn_on`, and while the TV is off its entities stay available and simply
   show *off*.
 - **No MAC address → no `turn_on`.** This happens when the TV was off or
-  unreachable during setup and has not been seen since. Add the MAC manually:
+  unreachable during setup, or when the TV does not report its MAC. Add the
+  MAC manually:
   open the integration's **Configure** (options) flow and enter the MAC
   address (format `aa:bb:cc:dd:ee:ff`). You find it in the TV's network
   settings or in your router.
@@ -255,12 +258,13 @@ data:
   earlier versions never showed the prompt because the TV ignores the
   library's `hello` handshake (issue #11).
 - **webOS 26 sets (firmware 43.x) reject pairing, or an existing setup
-  stopped working after a firmware update** — LG blacklists the legacy
-  signed manifest and invalidates old pairing keys on these sets. v2.0.3
-  detects the rejection and reconnects with an unsigned manifest
-  automatically. If the TV invalidated the old key, use the
-  reauthentication flow (or remove and re-add the integration) once; the
-  re-pair uses the same fallback. This is a different firmware behaviour
+  stopped working after a firmware update** — some sets reject the legacy
+  signed manifest. v2.0.4 retries with an unsigned manifest after the known
+  registration rejection, remembers that compatibility mode, and avoids
+  requesting software information that is unavailable in that mode. If the
+  stored pairing key is no longer registered, Home Assistant starts
+  reauthentication. Use **Reconfigure** to deliberately check whether the
+  normal signed manifest works again. This is a different firmware behaviour
   from the webOS 25 `hello` bug fixed in v2.0.2.
 - **TV shows unavailable** — the TV is likely off or unreachable. With a known
   MAC address the entities show *off* instead of *unavailable* and `turn_on`

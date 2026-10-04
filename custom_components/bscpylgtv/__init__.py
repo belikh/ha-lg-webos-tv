@@ -21,6 +21,7 @@ from bscpylgtv.exceptions import PyLGTVPairException
 from .const import (
     BSCP_CONNECTION_EXCEPTIONS,
     CONF_CLIENT_KEY,
+    CONF_UNSIGNED_MANIFEST,
     CONFIG_ENTRY_MINOR_VERSION,
     CONFIG_ENTRY_VERSION,
     DISCONNECT_TIMEOUT,
@@ -39,6 +40,7 @@ from .coordinator import (
     release_client,
     update_client_key,
     update_mac_address,
+    update_manifest_mode,
 )
 from .migration import async_migrate_entity_unique_ids
 
@@ -100,7 +102,10 @@ async def _async_update_unique_id(
     if old_unique_id is None or not _needs_unique_id_fix(old_unique_id):
         return
     new_unique_id = await async_probe_device_uuid(
-        hass, entry.data[CONF_HOST], entry.data.get(CONF_CLIENT_KEY)
+        hass,
+        entry.data[CONF_HOST],
+        entry.data.get(CONF_CLIENT_KEY),
+        unsigned_manifest=entry.data.get(CONF_UNSIGNED_MANIFEST, False),
     )
     if not new_unique_id:
         new_unique_id = extract_mac(client.software_info)
@@ -218,8 +223,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
             translation_placeholders={"device": entry.title},
         )
 
+    unsigned_preferred = entry.data.get(CONF_UNSIGNED_MANIFEST, False)
     client = await make_runtime_client(
-        hass, entry.data[CONF_HOST], entry.data.get(CONF_CLIENT_KEY)
+        hass,
+        entry.data[CONF_HOST],
+        entry.data.get(CONF_CLIENT_KEY),
+        unsigned_manifest=unsigned_preferred,
     )
     coordinator = BscpylgtvCoordinator(hass, entry, client)
     entry.runtime_data = coordinator
@@ -234,13 +243,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
     # and a silently rejected registration is caught by a real request.
     connected = False
     try:
-        client = await async_connect_with_manifest_fallback(
+        result = await async_connect_with_manifest_fallback(
             client,
             make_unsigned=lambda: coordinator._async_make_client(  # noqa: SLF001
                 unsigned_manifest=True
             ),
             connect_timeout=RECONNECT_TIMEOUT,
             prepare=coordinator._async_prepare_client,  # noqa: SLF001
+            unsigned_preferred=unsigned_preferred,
         )
     except PyLGTVPairException as err:
         raise ConfigEntryAuthFailed(
@@ -254,7 +264,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: BscpylgtvConfigEntry) ->
         connected = True
 
     if connected:
-        coordinator.client = client
+        coordinator.client = result.client
+        client = result.client
+        update_manifest_mode(hass, entry, result.unsigned_manifest)
         # Lazy v1 -> v2 unique_id fix (bounded hello probe, MAC fallback).
         await _async_update_unique_id(hass, entry, client)
         update_client_key(hass, entry, client)

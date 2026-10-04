@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.0.4
+
+### Fixed
+
+*   **webOS 26 manifest compatibility.** Retry with an unsigned manifest
+    after the known registration rejection. Only that compatibility path
+    omits `software_info` from runtime states; signed connections retain the
+    full default state set.
+*   **Invalid pairing keys in compatibility mode.** Start reauthentication
+    when the unsigned registration is rejected, while normal connection
+    failures keep the usual retry behavior.
+*   **Wake-on-LAN MAC detection.** Automatic MAC recovery uses software
+    information only when the TV provides it; existing and manually entered
+    MAC addresses are preserved.
+
+### Changed
+
+*   Update the dependency to the official `bscpylgtv` 0.5.5 release.
+*   Reconfigure re-checks the signed manifest before keeping compatibility
+    mode.
+
 ## 2.0.3
 
 ### Fixed

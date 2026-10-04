@@ -15,11 +15,12 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.bscpylgtv.const import DOMAIN
+from custom_components.bscpylgtv.const import DOMAIN, runtime_states
 
 from .conftest import TVSimulator, build_mock_config_entry, patch_client_factory
 
 LOGGER_NAME = "custom_components.bscpylgtv"
+MEDIA_PLAYER = "media_player.lg_webos_tv_oled55c2"
 
 
 async def test_setup_unload_reload(hass: HomeAssistant, tv: TVSimulator) -> None:
@@ -39,6 +40,31 @@ async def test_setup_unload_reload(hass: HomeAssistant, tv: TVSimulator) -> None
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
         assert entry.state is ConfigEntryState.LOADED
+
+
+async def test_setup_with_unavailable_software_info(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Missing optional software metadata does not block entities."""
+    tv.software_info = None
+    tv.software_info_rejected = True
+    with patch_client_factory(tv):
+        entry = build_mock_config_entry(hass, host=tv.host)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    client = entry.runtime_data.client
+    assert entry.state is ConfigEntryState.LOADED
+    assert client.is_connected()
+    assert client.software_info is None
+    assert client.init_kwargs["states"] == runtime_states(unsigned_manifest=True)
+    assert entry.data["unsigned_manifest"] is True
+    assert entry.runtime_data.last_update_success
+
+    state = hass.states.get(MEDIA_PLAYER)
+    assert state is not None
+    assert state.state == "on"
+    assert state.attributes["app_name"] == "YouTube"
 
 
 async def test_services_registered_on_setup(

@@ -40,6 +40,7 @@ from .const import (
     COMMAND_TIMEOUT,
     CONF_CLIENT_KEY,
     CONF_SOURCES,
+    CONF_UNSIGNED_MANIFEST,
     CONFIG_ENTRY_MINOR_VERSION,
     CONFIG_ENTRY_VERSION,
     DEFAULT_NAME,
@@ -50,6 +51,7 @@ from .const import (
 )
 from .coordinator import (
     BscpylgtvConfigEntry,
+    ManifestConnectionResult,
     async_connect_with_manifest_fallback,
     async_probe_device_uuid,
     extract_mac,
@@ -106,17 +108,22 @@ def _entry_data(
     host: str,
     client_key: str | None,
     mac: str | None,
+    unsigned_manifest: bool,
     fallback_mac: str | None = None,
 ) -> dict[str, Any]:
     """Build entry data; the MAC is stored only when valid."""
-    data: dict[str, Any] = {CONF_HOST: host, CONF_CLIENT_KEY: client_key}
+    data: dict[str, Any] = {
+        CONF_HOST: host,
+        CONF_CLIENT_KEY: client_key,
+        CONF_UNSIGNED_MANIFEST: unsigned_manifest,
+    }
     mac = mac or fallback_mac
     if mac:
         data[CONF_MAC] = mac
     return data
 
 
-async def _async_pair(hass: HomeAssistant, host: str) -> WebOsClient:
+async def _async_pair(hass: HomeAssistant, host: str) -> ManifestConnectionResult:
     """Connect a fresh PROMPT-pairing client (plan AD-2).
 
     Pairing does not verify the link: no key exists until the prompt is
@@ -125,30 +132,38 @@ async def _async_pair(hass: HomeAssistant, host: str) -> WebOsClient:
     (webOS 26 — see ``build_unsigned_manifest``).
     """
     client = await make_pairing_client(hass, host)
-    return await async_connect_with_manifest_fallback(
+    result = await async_connect_with_manifest_fallback(
         client,
         make_unsigned=lambda: make_pairing_client(hass, host, unsigned_manifest=True),
         connect_timeout=_PAIRING_TIMEOUT,
         verify=False,
     )
+    return result
 
 
 async def _async_connect_with_key(
-    hass: HomeAssistant, host: str, client_key: str | None
-) -> WebOsClient:
+    hass: HomeAssistant,
+    host: str,
+    client_key: str | None,
+    *,
+    unsigned_preferred: bool = False,
+) -> ManifestConnectionResult:
     """Connect a runtime client with the stored key (reconfigure/options).
 
     Verified like every runtime connect: on webOS 26 the signed manifest
     can be rejected without raising, so a real request is the only
     reliable fallback signal.
     """
-    client = await make_runtime_client(hass, host, client_key)
+    client = await make_runtime_client(
+        hass, host, client_key, unsigned_manifest=unsigned_preferred
+    )
     return await async_connect_with_manifest_fallback(
         client,
         make_unsigned=lambda: make_runtime_client(
             hass, host, client_key, unsigned_manifest=True
         ),
         connect_timeout=RECONNECT_TIMEOUT,
+        unsigned_preferred=unsigned_preferred,
     )
 
 
@@ -177,6 +192,7 @@ class _PairingResult(NamedTuple):
     device_uuid: str | None
     mac: str | None
     title: str
+    unsigned_manifest: bool
 
     def unique_id(self, fallback_host: str) -> str:
         """Return the identity for the entry unique_id.
@@ -189,7 +205,9 @@ class _PairingResult(NamedTuple):
         return self.device_uuid or self.mac or fallback_host
 
 
-async def _async_capture_pairing_result(client: WebOsClient) -> _PairingResult:
+async def _async_capture_pairing_result(
+    connection: ManifestConnectionResult,
+) -> _PairingResult:
     """Capture the pairing key, device UUID, MAC and title, then disconnect.
 
     The pairing client subscribes to no states, so system/software info
@@ -198,6 +216,7 @@ async def _async_capture_pairing_result(client: WebOsClient) -> _PairingResult:
     hello UUID is usually absent because pairing deliberately skips
     hello; the caller resolves it with the bounded probe instead.
     """
+    client = connection.client
     system_info = await _async_best_effort(client.get_system_info)
     software_info = await _async_best_effort(client.get_software_info)
     device_uuid = (client.hello_info or {}).get("deviceUUID")
@@ -210,6 +229,7 @@ async def _async_capture_pairing_result(client: WebOsClient) -> _PairingResult:
         device_uuid=device_uuid if isinstance(device_uuid, str) else None,
         mac=extract_mac(software_info),
         title=title,
+        unsigned_manifest=connection.unsigned_manifest,
     )
 
 
@@ -224,7 +244,12 @@ async def _async_resolve_identity(
     """
     if result.device_uuid or not result.client_key:
         return result
-    device_uuid = await async_probe_device_uuid(hass, host, result.client_key)
+    device_uuid = await async_probe_device_uuid(
+        hass,
+        host,
+        result.client_key,
+        unsigned_manifest=result.unsigned_manifest,
+    )
     if device_uuid:
         return result._replace(device_uuid=device_uuid)
     return result
@@ -272,8 +297,8 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                client = await _async_pair(self.hass, self._host)
-                result = await _async_capture_pairing_result(client)
+                connection = await _async_pair(self.hass, self._host)
+                result = await _async_capture_pairing_result(connection)
                 result = await _async_resolve_identity(self.hass, self._host, result)
             except PyLGTVPairException:
                 errors["base"] = "error_pairing"
@@ -288,7 +313,12 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._name = result.title
                 return self.async_create_entry(
                     title=self._name,
-                    data=_entry_data(self._host, result.client_key, result.mac),
+                    data=_entry_data(
+                        self._host,
+                        result.client_key,
+                        result.mac,
+                        result.unsigned_manifest,
+                    ),
                 )
 
         return self.async_show_form(step_id="pairing", errors=errors)
@@ -339,8 +369,8 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 # Re-pair from scratch: the stored key is no longer valid.
-                client = await _async_pair(self.hass, self._host)
-                result = await _async_capture_pairing_result(client)
+                connection = await _async_pair(self.hass, self._host)
+                result = await _async_capture_pairing_result(connection)
             except PyLGTVPairException:
                 errors["base"] = "error_pairing"
             except BSCP_CONNECTION_EXCEPTIONS:
@@ -351,6 +381,7 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._host,
                     result.client_key,
                     result.mac,
+                    result.unsigned_manifest,
                     reauth_entry.data.get(CONF_MAC),
                 )
                 # The entry unique_id is left untouched: a legacy v1
@@ -371,10 +402,11 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             host = user_input[CONF_HOST]
             try:
-                client = await self._async_reconfigure_client(
-                    host, reconfigure_entry.data.get(CONF_CLIENT_KEY)
+                connection = await self._async_reconfigure_client(
+                    host,
+                    reconfigure_entry.data.get(CONF_CLIENT_KEY),
                 )
-                result = await _async_capture_pairing_result(client)
+                result = await _async_capture_pairing_result(connection)
                 result = await _async_resolve_identity(self.hass, host, result)
             except PyLGTVPairException:
                 errors["base"] = "error_pairing"
@@ -394,6 +426,7 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
                     host,
                     result.client_key,
                     result.mac,
+                    result.unsigned_manifest,
                     reconfigure_entry.data.get(CONF_MAC),
                 )
                 if stored_unique_id != identity:
@@ -430,29 +463,32 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def _async_reconfigure_client(
         self, host: str, client_key: str | None
-    ) -> WebOsClient:
+    ) -> ManifestConnectionResult:
         """Return a verified client for reconfigure, re-pairing if needed.
 
-        A stale key can slip through registration (the TV answers the
-        pre-registration hello but rejects commands), so the stored-key
-        path is verified with a real request before being trusted; when
-        it fails, pairing restarts from scratch and the TV shows a fresh
-        PROMPT for the user to accept.
+        Reconfigure deliberately starts with the signed manifest so a
+        persisted compatibility mode can be re-evaluated. A stale key can
+        slip through registration (the TV answers the pre-registration hello
+        but rejects commands), so the stored-key path is verified with a real
+        request before being trusted; when it fails, pairing restarts from
+        scratch and the TV shows a fresh PROMPT for the user to accept.
         """
         if client_key is not None:
             try:
-                client = await _async_connect_with_key(self.hass, host, client_key)
+                connection = await _async_connect_with_key(self.hass, host, client_key)
             except PyLGTVPairException:
                 pass  # stored key rejected: fall through to fresh pairing
             except BSCP_CONNECTION_EXCEPTIONS:
                 raise
             else:
                 try:
-                    await asyncio.wait_for(client.get_system_info(), COMMAND_TIMEOUT)
+                    await asyncio.wait_for(
+                        connection.client.get_system_info(), COMMAND_TIMEOUT
+                    )
                 except Exception:  # noqa: BLE001 - stale key or dead link
-                    release_client(client)
+                    release_client(connection.client)
                 else:
-                    return client
+                    return connection
         return await _async_pair(self.hass, host)
 
 
@@ -529,15 +565,18 @@ class BscpylgtvOptionsFlow(OptionsFlowWithReload):
         surfaced in the form.
         """
         try:
-            client = await _async_connect_with_key(
-                self.hass, entry.data[CONF_HOST], entry.data.get(CONF_CLIENT_KEY)
+            connection = await _async_connect_with_key(
+                self.hass,
+                entry.data[CONF_HOST],
+                entry.data.get(CONF_CLIENT_KEY),
+                unsigned_preferred=entry.data.get(CONF_UNSIGNED_MANIFEST, False),
             )
         except PyLGTVPairException:
             return self._snapshot_sources(), {"base": "error_pairing"}
         except BSCP_CONNECTION_EXCEPTIONS:
             return self._snapshot_sources(), {"base": "cannot_connect"}
-        sources = _get_sources(client.apps, client.inputs)
-        await _async_disconnect(client)
+        sources = _get_sources(connection.client.apps, connection.client.inputs)
+        await _async_disconnect(connection.client)
         return sources, {}
 
     def _snapshot_sources(self) -> list[str]:

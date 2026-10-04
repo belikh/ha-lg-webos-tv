@@ -15,7 +15,7 @@ requires-python = ">=3.14.2"
 # match the manifest pin.
 [dependency-groups]
 dev = [
-    "bscpylgtv==0.5.4",
+    "bscpylgtv==0.5.5",
     "pytest-homeassistant-custom-component==0.13.367",
     "async-upnp-client==0.48.1",
     "mypy==2.3.1",

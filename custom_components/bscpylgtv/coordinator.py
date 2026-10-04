@@ -24,7 +24,7 @@ import re
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST
@@ -37,14 +37,14 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from bscpylgtv import WebOsClient
-from bscpylgtv.exceptions import PyLGTVPairException
+from bscpylgtv.exceptions import PyLGTVCmdError, PyLGTVPairException
 from bscpylgtv.manifest import MANIFEST
 
 from .const import (
     BSCP_CONNECTION_EXCEPTIONS,
     CONF_CLIENT_KEY,
     CONF_MAC,
-    DEFAULT_STATES,
+    CONF_UNSIGNED_MANIFEST,
     DISCONNECT_TIMEOUT,
     DOMAIN,
     HELLO_PROBE_TIMEOUT,
@@ -52,6 +52,7 @@ from .const import (
     PROBE_TIMEOUT,
     RECONNECT_TIMEOUT,
     SCAN_INTERVAL,
+    runtime_states,
 )
 from .key_storage import InMemoryKeyStorage
 
@@ -61,7 +62,7 @@ def build_unsigned_manifest() -> dict[str, Any]:
 
     webOS 26 (firmware 43.x) rejects the legacy signed manifest with a
     ``403 Pairing rejected: blacklisted certificate detected`` registration
-    error and invalidates existing pairing keys. The recovery, matching
+    error. The recovery, matching
     aiowebostv's fix for Home Assistant core (PR #719), is to drop
     ``signatures``/``signed`` and move the signed-only permissions into the
     outer permissions block that the on-screen pairing prompt grants.
@@ -84,6 +85,16 @@ def build_unsigned_manifest() -> dict[str, Any]:
         )
     )
     return {**manifest, "permissions": permissions}
+
+
+def _is_compatibility_permission_error(err: PyLGTVCmdError) -> bool:
+    """Match the observed registration rejection requiring unsigned mode."""
+    message = err.message
+    return (
+        isinstance(message, Mapping)
+        and message.get("type") == "error"
+        and message.get("error") == "401 insufficient permissions (not registered)"
+    )
 
 
 async def make_runtime_client(
@@ -121,7 +132,11 @@ async def make_runtime_client(
             ping_interval=10,
             volume_step_delay_ms=100,
             get_hello_info=get_hello_info,
-            states=DEFAULT_STATES if states is None else states,
+            states=(
+                runtime_states(unsigned_manifest=unsigned_manifest)
+                if states is None
+                else list(states)
+            ),
         )
     )
     if unsigned_manifest:
@@ -162,7 +177,11 @@ async def make_pairing_client(
 
 
 async def async_probe_device_uuid(
-    hass: HomeAssistant, host: str, client_key: str | None
+    hass: HomeAssistant,
+    host: str,
+    client_key: str | None,
+    *,
+    unsigned_manifest: bool = False,
 ) -> str | None:
     """Return the hello ``deviceUUID`` for a paired TV, or None.
 
@@ -176,7 +195,12 @@ async def async_probe_device_uuid(
     if not client_key:
         return None
     client = await make_runtime_client(
-        hass, host, client_key, get_hello_info=True, states=[]
+        hass,
+        host,
+        client_key,
+        get_hello_info=True,
+        states=[],
+        unsigned_manifest=unsigned_manifest,
     )
     try:
         await asyncio.wait_for(client.connect(), HELLO_PROBE_TIMEOUT)
@@ -205,6 +229,13 @@ def release_client(client: WebOsClient | None) -> None:
         task.cancel()
 
 
+class ManifestConnectionResult(NamedTuple):
+    """Connected client and the manifest mode that successfully registered."""
+
+    client: WebOsClient
+    unsigned_manifest: bool
+
+
 async def async_connect_with_manifest_fallback(
     client: WebOsClient,
     *,
@@ -212,7 +243,8 @@ async def async_connect_with_manifest_fallback(
     connect_timeout: float,
     prepare: Callable[[WebOsClient], Awaitable[None]] | None = None,
     verify: bool = True,
-) -> WebOsClient:
+    unsigned_preferred: bool = False,
+) -> ManifestConnectionResult:
     """Connect ``client``, retrying once with the unsigned manifest.
 
     webOS 26 (firmware 43.x) rejects the legacy signed manifest with a
@@ -220,8 +252,13 @@ async def async_connect_with_manifest_fallback(
     error. bscpylgtv discards that frame: without a stored key it raises
     ``PyLGTVPairException("Unable to pair")``, and with a stored key it can
     even report success over a dead registration. Both signals are caught
-    here: the connection is abandoned and retried once with the merged
-    unsigned manifest (``build_unsigned_manifest``).
+    here: the connection is abandoned and retried
+    once with the merged unsigned manifest (``build_unsigned_manifest``),
+    unless unsigned mode was already selected by a previous successful
+    pairing. A signed runtime-state request can also fail with the expected
+    insufficient-permissions response; only that specific command error
+    triggers the same retry. The same response from the selected unsigned
+    path means the stored key is unusable and is raised as a pairing error.
 
     TVs that still accept the signed manifest are untouched — the retry
     only happens after a rejection, so elevated signed-only permissions
@@ -233,11 +270,11 @@ async def async_connect_with_manifest_fallback(
     re-register the state-update callback. ``verify`` runs a real,
     bounded request after connect to catch a silently rejected
     registration; disable it for pairing, where no key exists yet.
-    Returns the connected client, or raises the last error when both
-    manifests were rejected.
+    Returns the connected client and its manifest mode, or raises the last
+    error when the selected mode was rejected.
     """
     candidate = client
-    unsigned = False
+    unsigned = unsigned_preferred
     last_error: Exception | None = None
     while True:
         if prepare is not None:
@@ -245,22 +282,39 @@ async def async_connect_with_manifest_fallback(
         try:
             await asyncio.wait_for(candidate.connect(), connect_timeout)
         except PyLGTVPairException as err:
+            # bscpylgtv 0.5.5 collapses a rejected registration frame into
+            # this generic error, so it is the only pairing fallback signal.
+            last_error = err
+        except PyLGTVCmdError as err:
+            if not _is_compatibility_permission_error(err):
+                release_client(candidate)
+                raise
             last_error = err
         except Exception:
             release_client(candidate)
             raise
         else:
             if not verify:
-                return candidate
+                return ManifestConnectionResult(candidate, unsigned)
             try:
                 await asyncio.wait_for(candidate.get_power_state(), PROBE_TIMEOUT)
-            except Exception as err:  # noqa: BLE001 - dead registration
+            except PyLGTVCmdError as err:
+                if not _is_compatibility_permission_error(err):
+                    release_client(candidate)
+                    raise
                 last_error = err
+            except Exception:
+                release_client(candidate)
+                raise
             else:
-                return candidate
+                return ManifestConnectionResult(candidate, unsigned)
         release_client(candidate)
         if unsigned:
             assert last_error is not None
+            if isinstance(last_error, PyLGTVCmdError):
+                raise PyLGTVPairException(
+                    "Stored client key is not registered"
+                ) from last_error
             raise last_error
         LOGGER.debug(
             "Signed manifest rejected (%s); retrying with the unsigned manifest",
@@ -279,6 +333,19 @@ def update_client_key(
         LOGGER.debug("Updating client key for host %s", entry.data[CONF_HOST])
         hass.config_entries.async_update_entry(
             entry, data={**entry.data, CONF_CLIENT_KEY: client.client_key}
+        )
+
+
+@callback
+def update_manifest_mode(
+    hass: HomeAssistant,
+    entry: BscpylgtvConfigEntry,
+    unsigned_manifest: bool,
+) -> None:
+    """Persist the manifest mode that successfully connected."""
+    if entry.data.get(CONF_UNSIGNED_MANIFEST, False) != unsigned_manifest:
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_UNSIGNED_MANIFEST: unsigned_manifest}
         )
 
 
@@ -341,12 +408,12 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
     async def async_handle_update(self, client: WebOsClient) -> None:
         """Handle a state update pushed by the TV.
 
-        Registered directly as the library callback. bscpylgtv 0.5.4 wraps
+        Registered directly as the library callback. bscpylgtv 0.5.5 wraps
         callback results itself (``asyncio.create_task`` in the teardown
         closeout, ``asyncio.gather`` on push), so this must stay a plain
         coroutine function — returning a Task would make the library's
         ``create_task`` raise. On 0.5.3 the same shape crashed teardown on
-        Python 3.11+; this integration pins 0.5.4.
+        Python 3.11+; this integration pins 0.5.5.
 
         Exception-shielded: the library's ``callback_handler`` only catches
         ``CancelledError``, so a callback exception would kill the
@@ -372,9 +439,13 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
         return True
 
     async def _async_make_client(
-        self, *, unsigned_manifest: bool = False
+        self, *, unsigned_manifest: bool | None = None
     ) -> WebOsClient:
         """Build a fresh runtime client, reading the current stored key."""
+        if unsigned_manifest is None:
+            unsigned_manifest = self.config_entry.data.get(
+                CONF_UNSIGNED_MANIFEST, False
+            )
         return await make_runtime_client(
             self.hass,
             self.config_entry.data[CONF_HOST],
@@ -387,7 +458,7 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
 
         The library clears state_update_callbacks in its teardown, so every
         fresh client needs it re-registered BEFORE the connect attempt
-        (plan AD-2). Plain coroutine function: bscpylgtv 0.5.4 wraps
+        (plan AD-2). Plain coroutine function: bscpylgtv 0.5.5 wraps
         callback results itself (create_task on teardown).
         """
         await client.register_state_update_callback(self.async_handle_update)
@@ -395,13 +466,15 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
     async def _async_reconnect(self) -> bool:
         """Abandon the current client and connect a fresh one (lock held)."""
         release_client(self.client)
+        unsigned_preferred = self.config_entry.data.get(CONF_UNSIGNED_MANIFEST, False)
         self.client = await self._async_make_client()
         try:
-            self.client = await async_connect_with_manifest_fallback(
+            result = await async_connect_with_manifest_fallback(
                 self.client,
                 make_unsigned=lambda: self._async_make_client(unsigned_manifest=True),
                 connect_timeout=RECONNECT_TIMEOUT,
                 prepare=self._async_prepare_client,
+                unsigned_preferred=unsigned_preferred,
             )
         except PyLGTVPairException as err:
             raise ConfigEntryAuthFailed(
@@ -413,6 +486,8 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
             # The helper already abandoned the failed candidate(s); the
             # next watchdog tick builds another fresh client.
             return False
+        self.client = result.client
+        update_manifest_mode(self.hass, self.config_entry, result.unsigned_manifest)
         update_client_key(self.hass, self.config_entry, self.client)
         update_mac_address(self.hass, self.config_entry, self.client)
         return True

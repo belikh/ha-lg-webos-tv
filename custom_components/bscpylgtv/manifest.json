@@ -10,11 +10,11 @@
   "issue_tracker": "https://github.com/belikh/ha-lg-webos-tv/issues",
   "loggers": ["bscpylgtv"],
   "quality_scale": "gold",
-  "requirements": ["bscpylgtv==0.5.4"],
+  "requirements": ["bscpylgtv==0.5.5"],
   "ssdp": [
     {
       "st": "urn:lge-com:service:webos-second-screen:1"
     }
   ],
-  "version": "2.0.3"
+  "version": "2.0.4"
 }

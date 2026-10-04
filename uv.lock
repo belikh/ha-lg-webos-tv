@@ -614,15 +614,15 @@ wheels = [
 
 [[package]]
 name = "bscpylgtv"
-version = "0.5.4"
+version = "0.5.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "sqlitedict" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/73/2a810da2b16c6167ef2af79baaab5ae8a8e018be64d11fbdf46364615bcc/bscpylgtv-0.5.4.tar.gz", hash = "sha256:9439c6f16197a657b651ef51e7fea9de386cdfe90124c3a3b618ae3f3e3e925f", size = 57102, upload-time = "2026-09-01T08:45:58.126Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/98/33/c51277b57e867f280d249efe6141a005939c59ef365cf8a2587ccc000aa5/bscpylgtv-0.5.5.tar.gz", hash = "sha256:c89cd6ae3ff741e75dc2658940579b2604b1d79793f7b06bf2b62d93ab0df784", size = 57291, upload-time = "2026-09-30T18:03:06.116Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/e3/11b43ae70750842ed33679e374196a63ffa937ee77985a8a2e65afb71ad4/bscpylgtv-0.5.4-py3-none-any.whl", hash = "sha256:d5420565b77e51a114f7e638cb9e7cedd79c23ea0032df661d8b9d419e41a95e", size = 42056, upload-time = "2026-09-01T08:45:56.976Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/f6/168c7f733193e803cfe2457f9d1685233ab76f439c7aeb491d6f40e210eb/bscpylgtv-0.5.5-py3-none-any.whl", hash = "sha256:20a099f504bf8106bd52d69ed704c6908785cf7e6ac5acdb89fe685162602f60", size = 42170, upload-time = "2026-09-30T18:03:05.072Z" },
 ]
 
 [[package]]
@@ -1185,7 +1185,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "async-upnp-client", specifier = "==0.48.1" },
-    { name = "bscpylgtv", specifier = "==0.5.4" },
+    { name = "bscpylgtv", specifier = "==0.5.5" },
     { name = "mypy", specifier = "==2.3.1" },
     { name = "pytest-homeassistant-custom-component", specifier = "==0.13.367" },
     { name = "ruff", specifier = "==0.16.9" },

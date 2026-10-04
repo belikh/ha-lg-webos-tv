@@ -16,9 +16,20 @@ from homeassistant.helpers.service_info.ssdp import (
     SsdpServiceInfo,
 )
 
-from custom_components.bscpylgtv.const import CONF_CLIENT_KEY, CONF_SOURCES, DOMAIN
+from custom_components.bscpylgtv.const import (
+    CONF_CLIENT_KEY,
+    CONF_SOURCES,
+    CONF_UNSIGNED_MANIFEST,
+    DOMAIN,
+)
+from custom_components.bscpylgtv.coordinator import ManifestConnectionResult
 
-from .conftest import TVSimulator, build_mock_config_entry, patch_client_factory
+from .conftest import (
+    TVSimulator,
+    build_mock_config_entry,
+    not_registered_error,
+    patch_client_factory,
+)
 
 HOST = "192.168.1.42"
 UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -108,6 +119,7 @@ async def test_user_flow_creates_entry(
         CONF_HOST: HOST,
         CONF_CLIENT_KEY: "fresh-key",
         CONF_MAC: tv.mac,
+        CONF_UNSIGNED_MANIFEST: False,
     }
     # The pairing client was disconnected after capturing the result.
     assert not tv.clients[0].is_connected()
@@ -135,6 +147,7 @@ async def test_user_flow_error_pairing(
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] == "create_entry"
     assert result["data"][CONF_CLIENT_KEY] == "fresh-key"
+    assert result["data"][CONF_UNSIGNED_MANIFEST] is False
 
 
 @pytest.mark.parametrize(
@@ -194,6 +207,7 @@ async def test_user_flow_retries_unsigned_manifest(
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] == "create_entry"
     assert result["data"][CONF_CLIENT_KEY] == "fresh-key"
+    assert result["data"][CONF_UNSIGNED_MANIFEST] is True
     # Signed manifest first, then exactly one unsigned retry.
     assert calls == [False, True]
 
@@ -295,6 +309,7 @@ async def test_user_flow_hello_broken_uses_mac(
         CONF_HOST: HOST,
         CONF_CLIENT_KEY: "fresh-key",
         CONF_MAC: tv.mac,
+        CONF_UNSIGNED_MANIFEST: False,
     }
 
 
@@ -418,7 +433,36 @@ async def test_reauth_success(hass: HomeAssistant, tv: TVSimulator, pair: Any) -
     assert result["type"] == "abort"
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_CLIENT_KEY] == "fresh-key"
+    assert entry.data[CONF_UNSIGNED_MANIFEST] is False
     # The reauth success triggers an entry reload; wait for it to finish.
+    await hass.async_block_till_done()
+
+
+async def test_reauth_unsigned_pairing_updates_manifest_mode(
+    hass: HomeAssistant, tv: TVSimulator, pairing_client: Any
+) -> None:
+    """Reauth stores the fresh key and unsigned mode that paired successfully."""
+    pairing_client._connected = True  # noqa: SLF001 - accepted on the TV
+    pairing_client.client_key = "fresh-key"
+    entry = build_mock_config_entry(hass, host=HOST, client_key="stale-key")
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    with (
+        patch(
+            "custom_components.bscpylgtv.config_flow.make_pairing_client",
+            AsyncMock(return_value=pairing_client),
+        ),
+        patch(
+            "custom_components.bscpylgtv.config_flow.async_connect_with_manifest_fallback",
+            AsyncMock(return_value=ManifestConnectionResult(pairing_client, True)),
+        ),
+    ):
+        result = await _start_reauth(hass, entry)
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_CLIENT_KEY] == "fresh-key"
+    assert entry.data[CONF_UNSIGNED_MANIFEST] is True
     await hass.async_block_till_done()
     assert entry.state.value == "loaded"
 
@@ -484,6 +528,72 @@ async def test_reconfigure_same_device(hass: HomeAssistant, tv: TVSimulator) -> 
     assert result["reason"] == "reconfigure_successful"
     assert entry.data[CONF_HOST] == HOST
     assert entry.unique_id == UUID
+
+
+async def test_reconfigure_reevaluates_unsigned_entry_as_signed(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Reconfigure can return a compatible TV to the signed manifest."""
+    entry = build_mock_config_entry(
+        hass,
+        host="192.168.1.99",
+        client_key="stored-key",
+        data={
+            CONF_HOST: "192.168.1.99",
+            CONF_CLIENT_KEY: "stored-key",
+            CONF_UNSIGNED_MANIFEST: True,
+        },
+    )
+    client = _runtime_client(tv)
+    with patch(
+        "custom_components.bscpylgtv.config_flow.make_runtime_client",
+        AsyncMock(return_value=client),
+    ) as make_client:
+        result = await _start_reconfigure(hass, entry)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: HOST}
+        )
+        await hass.async_block_till_done()
+    assert result["reason"] == "reconfigure_successful"
+    assert make_client.await_count == 1
+    assert make_client.await_args_list[0].kwargs["unsigned_manifest"] is False
+    assert entry.data[CONF_UNSIGNED_MANIFEST] is False
+
+
+async def test_reconfigure_keeps_unsigned_when_signed_is_rejected(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Reconfigure persists unsigned mode only after a legitimate fallback."""
+    entry = build_mock_config_entry(
+        hass,
+        host="192.168.1.99",
+        client_key="stored-key",
+        data={
+            CONF_HOST: "192.168.1.99",
+            CONF_CLIENT_KEY: "stored-key",
+            CONF_UNSIGNED_MANIFEST: True,
+        },
+    )
+    signed = _runtime_client(tv)
+    signed.get_power_state = AsyncMock(side_effect=not_registered_error())  # type: ignore[method-assign]
+    unsigned = _runtime_client(tv)
+    with patch(
+        "custom_components.bscpylgtv.config_flow.make_runtime_client",
+        AsyncMock(side_effect=[signed, unsigned]),
+    ) as make_client:
+        result = await _start_reconfigure(hass, entry)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: HOST}
+        )
+        await hass.async_block_till_done()
+    assert result["reason"] == "reconfigure_successful"
+    assert [
+        call.kwargs["unsigned_manifest"] for call in make_client.await_args_list
+    ] == [
+        False,
+        True,
+    ]
+    assert entry.data[CONF_UNSIGNED_MANIFEST] is True
 
 
 async def test_reconfigure_wrong_device(hass: HomeAssistant, tv: TVSimulator) -> None:
@@ -666,6 +776,29 @@ async def test_options_live_sources_and_preselect(
     await hass.async_block_till_done()
     # Live client disconnected after the read.
     assert not client.is_connected()
+
+
+async def test_options_unsigned_entry_uses_unsigned_validation(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Options live-source validation keeps the persisted manifest mode."""
+    entry = build_mock_config_entry(
+        hass,
+        host=HOST,
+        data={
+            CONF_HOST: HOST,
+            CONF_CLIENT_KEY: "stored-key",
+            CONF_UNSIGNED_MANIFEST: True,
+        },
+    )
+    client = _runtime_client(tv)
+    with patch(
+        "custom_components.bscpylgtv.config_flow.make_runtime_client",
+        AsyncMock(return_value=client),
+    ) as make_client:
+        result = await _open_options(hass, entry)
+    assert result["type"] == "form"
+    assert make_client.await_args_list[0].kwargs["unsigned_manifest"] is True
 
 
 async def test_options_persists_mac(hass: HomeAssistant, tv: TVSimulator) -> None:
