@@ -200,6 +200,13 @@ data:
   filename: /config/www/tv_screen.jpg
 ```
 
+The `filename` path is validated against Home Assistant's allowed paths
+(`hass.config.is_allowed_path`) before writing — it must resolve inside the
+config directory (e.g. `<config>/www/...`). Paths outside the allowed
+directories are rejected with a `ServiceValidationError`, so the service
+cannot overwrite arbitrary files on the system. The screenshot button entity
+uses a fixed path under `<config>/www` and is unaffected.
+
 ```yaml
 # response (no filename given)
 image: "/9j/4AAQSkZJRgABAQ..."  # base64 JPEG
