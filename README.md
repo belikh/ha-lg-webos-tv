@@ -355,3 +355,13 @@ dev group and run `uv lock` in the same change.
   modeled on their work.
 - **[@Xitee1](https://github.com/Xitee1)** — PR #8 *"Fix state updates dying
   due to dict iteration over apps/inputs"*.
+- **@AquaCobell** & **@jerielsr** — issue #14, reporting entities unavailable
+  after pairing on webOS 26 sets (blacklisted-certificate rejection).
+- **@Ramss3s** — issue #13, reporting webOS 26 pairing failure on
+  firmware 43.21.71.
+- **@NoCleverMoniker** & **@starast** — issue #11, reporting the webOS 25
+  pairing timeout caused by the library's `hello` handshake.
+- **@brei-er** — PR #12, robust webOS 26 manifest compatibility
+  (unsigned-manifest fallback, persisted compatibility mode).
+- **@frenck** — security review that prompted `is_allowed_path` validation on
+  the `take_screenshot` filename and notify `icon` path.
