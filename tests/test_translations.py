@@ -61,6 +61,8 @@ EXCEPTION_KEYS = {
     "notify_device_off",
     "notify_communication_error",
     "notify_icon_not_found",
+    "notify_icon_path_not_allowed",
+    "screenshot_path_not_allowed",
     "screenshot_write_failed",
     "invalid_mac",
 }

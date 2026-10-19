@@ -22,7 +22,7 @@ from homeassistant.components.notify import (
 )
 from homeassistant.const import ATTR_ICON
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from bscpylgtv.endpoints import SHOW_MESSAGE
@@ -43,9 +43,15 @@ async def async_setup_entry(
     async_add_entities([BscpylgtvNotifyEntity(entry)])
 
 
-def _read_icon(icon_path: str) -> tuple[str, str]:
+def _read_icon(hass: HomeAssistant, icon_path: str) -> tuple[str, str]:
     """Read and base64-encode an icon file (executor only; blocking I/O)."""
     path = Path(icon_path)
+    if not hass.config.is_allowed_path(str(path)):
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="notify_icon_path_not_allowed",
+            translation_placeholders={"icon_path": icon_path},
+        )
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return encoded, path.suffix[1:]
 
@@ -95,7 +101,7 @@ class BscpylgtvNotifyEntity(BscpylgtvEntity, NotifyEntity):
         if icon_path := data.get(ATTR_ICON):
             try:
                 icon_data, icon_extension = await self.hass.async_add_executor_job(
-                    _read_icon, str(icon_path)
+                    _read_icon, self.hass, str(icon_path)
                 )
             except OSError as err:
                 raise HomeAssistantError(

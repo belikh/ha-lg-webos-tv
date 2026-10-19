@@ -11,7 +11,7 @@ import pytest
 from bscpylgtv.endpoints import SHOW_MESSAGE
 from bscpylgtv.exceptions import PyLGTVCmdError
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .conftest import get_entity
 
@@ -106,6 +106,7 @@ async def test_communication_error_translated(integration: Any) -> None:
 
 async def test_icon_read_in_executor_and_sent(integration: Any) -> None:
     hass = integration.coordinator.hass
+    hass.config.allowlist_external_dirs.add(hass.config.path("www"))
     icon = Path(hass.config.config_dir) / "www" / "dinner.png"
     icon.parent.mkdir(parents=True, exist_ok=True)
     content = b"\x89PNG\r\n\x1a\nFAKEPNG"
@@ -118,7 +119,9 @@ async def test_icon_read_in_executor_and_sent(integration: Any) -> None:
 
 async def test_icon_without_extension(integration: Any) -> None:
     hass = integration.coordinator.hass
-    icon = Path(hass.config.config_dir) / "icon"
+    hass.config.allowlist_external_dirs.add(hass.config.path("www"))
+    icon = Path(hass.config.config_dir) / "www" / "icon"
+    icon.parent.mkdir(parents=True, exist_ok=True)
     icon.write_bytes(b"raw")
     await _entity(hass).async_send_message("Hi", data={"icon": str(icon)})
     _, payload = _toast(integration.tv.client)
@@ -127,9 +130,22 @@ async def test_icon_without_extension(integration: Any) -> None:
 
 async def test_missing_icon_raises_notify_icon_not_found(integration: Any) -> None:
     hass = integration.coordinator.hass
+    hass.config.allowlist_external_dirs.add(hass.config.path("www"))
+    # An allowed path that does not exist: the file-not-found error must
+    # surface, not the path-not-allowed error.
     with pytest.raises(HomeAssistantError) as err:
         await _entity(hass).async_send_message(
-            "Hi", data={"icon": "/nonexistent/icon.png"}
+            "Hi",
+            data={"icon": str(hass.config.path("www", "nonexistent.png"))},
         )
     assert err.value.translation_key == "notify_icon_not_found"
+    integration.tv.client.request.assert_not_awaited()
+
+
+async def test_icon_disallowed_path_raises(integration: Any) -> None:
+    """An icon path outside the config dir is rejected before being read."""
+    hass = integration.coordinator.hass
+    with pytest.raises(ServiceValidationError) as err:
+        await _entity(hass).async_send_message("Hi", data={"icon": "/etc/passwd"})
+    assert err.value.translation_key == "notify_icon_path_not_allowed"
     integration.tv.client.request.assert_not_awaited()

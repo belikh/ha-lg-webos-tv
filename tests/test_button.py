@@ -81,6 +81,10 @@ async def test_press_reboot(integration: Any) -> None:
 
 async def test_press_screenshot_writes_jpeg(integration: Any) -> None:
     hass = integration.coordinator.hass
+    # In production the homeassistant component adds config/www to
+    # ``allowlist_external_dirs``; replicate that here so ``is_allowed_path``
+    # accepts paths under config/www (as it would in a real install).
+    hass.config.allowlist_external_dirs.add(hass.config.path("www"))
     registry_entry = _buttons(hass, integration.entry.unique_id)["screenshot"]
     await _press(hass, registry_entry.entity_id)
     path = Path(hass.config.path("www", f"bscpylgtv_{integration.entry.unique_id}.jpg"))

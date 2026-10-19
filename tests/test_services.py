@@ -209,6 +209,10 @@ async def test_take_screenshot_returns_base64_response(integration: Any) -> None
 async def test_take_screenshot_writes_jpeg_file(integration: Any) -> None:
     """A filename is resolved against the config dir and gets JPEG magic."""
     hass = integration.coordinator.hass
+    # In production the homeassistant component adds config/www to
+    # ``allowlist_external_dirs``; replicate that here so ``is_allowed_path``
+    # accepts paths under config/www (as it would in a real install).
+    hass.config.allowlist_external_dirs.add(hass.config.path("www"))
     response = await _call(
         hass, "take_screenshot", {"filename": "www/tv_shot.jpg"}, return_response=True
     )
@@ -231,6 +235,14 @@ async def test_take_screenshot_write_failure(integration: Any) -> None:
     ):
         await _call(hass, "take_screenshot", {"filename": "www/broken.jpg"})
     assert err.value.translation_key == "screenshot_write_failed"
+
+
+async def test_take_screenshot_disallowed_path(integration: Any) -> None:
+    """A path outside the config dir is rejected before any file is written."""
+    hass = integration.coordinator.hass
+    with pytest.raises(ServiceValidationError) as err:
+        await _call(hass, "take_screenshot", {"filename": "/etc/passwd"})
+    assert err.value.translation_key == "screenshot_path_not_allowed"
 
 
 async def test_take_screenshot_imageuri_url(

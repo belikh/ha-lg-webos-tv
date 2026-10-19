@@ -29,7 +29,11 @@ from typing import Any, NamedTuple
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    HomeAssistantError,
+    ServiceValidationError,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -548,6 +552,7 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
             try:
                 await self.hass.async_add_executor_job(
                     _write_screenshot_file,
+                    self.hass,
                     self.hass.config.config_dir,
                     filename,
                     image,
@@ -607,10 +612,18 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
 type BscpylgtvConfigEntry = ConfigEntry[BscpylgtvCoordinator]
 
 
-def _write_screenshot_file(config_dir: str, filename: str, data: bytes) -> None:
+def _write_screenshot_file(
+    hass: HomeAssistant, config_dir: str, filename: str, data: bytes
+) -> None:
     """Write screenshot bytes to disk (executor only; blocking I/O)."""
     path = Path(filename)
     if not path.is_absolute():
         path = Path(config_dir) / path
+    if not hass.config.is_allowed_path(str(path)):
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="screenshot_path_not_allowed",
+            translation_placeholders={"filename": filename},
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)

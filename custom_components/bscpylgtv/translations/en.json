@@ -148,6 +148,12 @@
     "notify_icon_not_found": {
       "message": "Icon {icon_path} not found when sending notification for device {name}"
     },
+    "notify_icon_path_not_allowed": {
+      "message": "Icon path {icon_path} is not allowed."
+    },
+    "screenshot_path_not_allowed": {
+      "message": "Screenshot path {filename} is not allowed."
+    },
     "screenshot_write_failed": {
       "message": "Could not write the screenshot file to {path}."
     },

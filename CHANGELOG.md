@@ -14,6 +14,12 @@
 *   **Wake-on-LAN MAC detection.** Automatic MAC recovery uses software
     information only when the TV provides it; existing and manually entered
     MAC addresses are preserved.
+*   **Path traversal on `take_screenshot` filename and notify `icon`.**
+    `bscpylgtv.take_screenshot` and the notify entity's icon path are now
+    validated with `hass.config.is_allowed_path(...)` before any file is
+    written or read; disallowed paths raise a translated
+    `ServiceValidationError` (matching core `camera.snapshot`). Any HA user
+    or script can no longer overwrite arbitrary files via these services.
 
 ### Changed
 
