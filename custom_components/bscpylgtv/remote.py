@@ -126,13 +126,8 @@ class BscpylgtvRemote(BscpylgtvEntity, RemoteEntity):
     @cmd
     @override
     async def async_send_command(self, command: Iterable[str], **kwargs: Any) -> None:
-        """Send one or more commands to the device.
-
-        The frontend may pass a single command as a bare string; treat it as a
-        one-element list so we never iterate over its characters.
-        """
-        commands: Iterable[str] = [command] if isinstance(command, str) else command
-        for single in commands:
+        """Send one or more commands to the device."""
+        for single in command:
             await self._async_send_single_command(single)
 
     @cmd
