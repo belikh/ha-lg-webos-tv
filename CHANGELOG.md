@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.5
+
+### Security
+
+*   **Screenshot button removed.** The button wrote the current TV picture to
+    `<config>/www/bscpylgtv_<unique_id>.jpg`. Home Assistant serves that folder
+    at `/local/` without authentication, so anyone who could reach the instance
+    could view the screen, and the file name (device UUID, MAC address, or
+    host) was not a secret. Screenshots are now captured only through
+    `bscpylgtv.take_screenshot`: returned as base64 in the service response, or
+    written to a path that is explicitly allowed (for example `/media`).
+    The README and `services.yaml` examples no longer point at `www`.
+
 ## 2.0.4
 
 ### Fixed

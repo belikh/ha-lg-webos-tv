@@ -4,9 +4,6 @@
       "reboot": {
         "default": "mdi:restart"
       },
-      "screenshot": {
-        "default": "mdi:camera-image"
-      },
       "turn_screen_off": {
         "default": "mdi:television-off"
       },

@@ -103,7 +103,6 @@ by Wi-Fi*) in the TV's own settings and try again.
 | `notify` | Notifications | — | enabled | Toast notifications on the TV screen, optional `icon` |
 | `button` | Turn screen off | — | enabled | Switch the panel off while keeping the TV running |
 | `button` | Turn screen on | — | enabled | Switch the panel back on |
-| `button` | Screenshot | — | enabled | Save a screenshot to `<config>/www/bscpylgtv_<deviceUUID>.jpg` |
 | `button` | Reboot | Config | **disabled** | Reboot the TV |
 | `number` | Backlight | Config | **disabled** | Backlight / OLED light, 0–100 |
 | `number` | Contrast | Config | **disabled** | Contrast, 0–100 |
@@ -197,15 +196,22 @@ service: bscpylgtv.take_screenshot
 target:
   entity_id: media_player.lg_webos_tv
 data:
-  filename: /config/www/tv_screen.jpg
+  filename: /media/tv_screen.jpg
 ```
 
 The `filename` path is validated against Home Assistant's allowed paths
-(`hass.config.is_allowed_path`) before writing — it must resolve inside the
-config directory (e.g. `<config>/www/...`). Paths outside the allowed
-directories are rejected with a `ServiceValidationError`, so the service
-cannot overwrite arbitrary files on the system. The screenshot button entity
-uses a fixed path under `<config>/www` and is unaffected.
+(`hass.config.is_allowed_path`) before writing. It must resolve inside an
+existing allowed directory: the media directory (`/media`) and
+`<config>/www` are allowed by default; add other directories to
+`allowlist_external_dirs` if needed. Paths outside the allowed directories
+are rejected with a `ServiceValidationError`, so the service cannot
+overwrite arbitrary files on the system.
+
+**Do not write screenshots to `<config>/www`.** Home Assistant serves that
+folder at `/local/` without authentication, so anyone who can reach your
+instance could view the picture. Use `/media` (or another allow-listed
+private directory) instead. The integration no longer has a Screenshot
+button for the same reason; call this service from an automation or script.
 
 ```yaml
 # response (no filename given)
@@ -253,7 +259,7 @@ service: notify.lg_webos_tv_notifications
 data:
   message: "Dinner is ready!"
   data:
-    icon: /config/www/dinner.png
+    icon: /media/dinner.png
 ```
 
 ## Troubleshooting
@@ -363,5 +369,6 @@ dev group and run `uv lock` in the same change.
   pairing timeout caused by the library's `hello` handshake.
 - **@brei-er** — PR #12, robust webOS 26 manifest compatibility
   (unsigned-manifest fallback, persisted compatibility mode).
-- **@frenck** — security review that prompted `is_allowed_path` validation on
-  the `take_screenshot` filename and notify `icon` path.
+- **@frenck** — security reviews that prompted `is_allowed_path` validation
+  on the `take_screenshot` filename and notify `icon` path, and removing the
+  screenshot button that wrote into the publicly served `www` directory.

@@ -15,7 +15,7 @@ COMPONENT_DIR = (
 
 # Every entity key the integration ships, per platform (plan §3.2).
 ENTITY_KEYS: dict[str, set[str]] = {
-    "button": {"turn_screen_off", "turn_screen_on", "screenshot", "reboot"},
+    "button": {"turn_screen_off", "turn_screen_on", "reboot"},
     "number": {
         "backlight",
         "contrast",

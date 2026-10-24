@@ -66,7 +66,7 @@ take_screenshot:
       domain: media_player
   fields:
     filename:
-      example: "www/bscpylgtv_screenshot.jpg"
+      example: "/media/bscpylgtv_screenshot.jpg"
       selector:
         text:
 

@@ -46,9 +46,6 @@
       "reboot": {
         "name": "Reboot"
       },
-      "screenshot": {
-        "name": "Screenshot"
-      },
       "turn_screen_off": {
         "name": "Turn screen off"
       },
@@ -252,7 +249,7 @@
       "description": "Take a screenshot of the current TV screen.",
       "fields": {
         "filename": {
-          "description": "Optional file path to write the JPEG screenshot to. When omitted, the image is returned as base64 in the service response.",
+          "description": "Optional file path to write the JPEG screenshot to. Must resolve inside an allowed path, such as the media directory. Do not use the www directory: Home Assistant serves it publicly. When omitted, the image is returned as base64 in the service response.",
           "name": "Filename"
         }
       },

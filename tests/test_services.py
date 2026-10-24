@@ -209,14 +209,18 @@ async def test_take_screenshot_returns_base64_response(integration: Any) -> None
 async def test_take_screenshot_writes_jpeg_file(integration: Any) -> None:
     """A filename is resolved against the config dir and gets JPEG magic."""
     hass = integration.coordinator.hass
-    # In production the homeassistant component adds config/www to
-    # ``allowlist_external_dirs``; replicate that here so ``is_allowed_path``
-    # accepts paths under config/www (as it would in a real install).
-    hass.config.allowlist_external_dirs.add(hass.config.path("www"))
+    # Screenshots are written to an explicitly allowed directory, never to
+    # ``config/www`` (Home Assistant serves that at /local without auth).
+    shots = Path(hass.config.path("screenshots"))
+    await hass.async_add_executor_job(shots.mkdir)
+    hass.config.allowlist_external_dirs.add(str(shots))
     response = await _call(
-        hass, "take_screenshot", {"filename": "www/tv_shot.jpg"}, return_response=True
+        hass,
+        "take_screenshot",
+        {"filename": "screenshots/tv_shot.jpg"},
+        return_response=True,
     )
-    path = Path(hass.config.path("www", "tv_shot.jpg"))
+    path = shots / "tv_shot.jpg"
     assert await hass.async_add_executor_job(path.is_file)
     data = await hass.async_add_executor_job(path.read_bytes)
     assert data[:2] == b"\xff\xd8"  # JPEG magic
@@ -226,6 +230,9 @@ async def test_take_screenshot_writes_jpeg_file(integration: Any) -> None:
 
 async def test_take_screenshot_write_failure(integration: Any) -> None:
     hass = integration.coordinator.hass
+    shots = Path(hass.config.path("screenshots"))
+    await hass.async_add_executor_job(shots.mkdir)
+    hass.config.allowlist_external_dirs.add(str(shots))
     with (
         patch(
             "custom_components.bscpylgtv.coordinator._write_screenshot_file",
@@ -233,7 +240,7 @@ async def test_take_screenshot_write_failure(integration: Any) -> None:
         ),
         pytest.raises(HomeAssistantError) as err,
     ):
-        await _call(hass, "take_screenshot", {"filename": "www/broken.jpg"})
+        await _call(hass, "take_screenshot", {"filename": "screenshots/broken.jpg"})
     assert err.value.translation_key == "screenshot_write_failed"
 
 
