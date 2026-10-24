@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import importlib
 import re
 from pathlib import Path
 from typing import Any
@@ -18,6 +17,7 @@ from homeassistant.helpers.typing import ConfigType
 from bscpylgtv import WebOsClient
 from bscpylgtv.exceptions import PyLGTVPairException
 
+from . import services
 from .const import (
     BSCP_CONNECTION_EXCEPTIONS,
     CONF_CLIENT_KEY,
@@ -62,15 +62,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the LG WebOS TV (bscpylgtv) integration."""
     if not hass.data.get(_SERVICES_SETUP_FLAG):
         hass.data[_SERVICES_SETUP_FLAG] = True
-        # Entity services live in services.py (Cluster C). Imported at call
-        # time via importlib so the package stays importable (and type-clean)
-        # at every cluster boundary; the ImportError is swallowed until that
-        # module lands. Keep as importlib: works unchanged once it exists.
-        try:
-            services = importlib.import_module(".services", __package__)
-            services.async_setup(hass)
-        except ImportError:
-            LOGGER.debug("services module not available yet; skipping registration")
+        # Imported at module level: importing inside the event loop triggers
+        # Home Assistant's blocking-call detector (issue #15).
+        services.async_setup(hass)
     return True
 
 

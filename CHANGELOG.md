@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.6
+
+### Fixed
+
+*   **Blocking import at startup.** Services are now imported with the
+    integration instead of calling `importlib.import_module` inside
+    `async_setup`. Home Assistant's event-loop detector flagged the lazy
+    import as a blocking call (issue #15).
+
 ## 2.0.5
 
 ### Security
