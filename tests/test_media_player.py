@@ -510,11 +510,12 @@ async def test_set_volume_level_clamps_out_of_range(
     tv.clients[0].set_volume.assert_awaited_once_with(expected)
 
 
-async def test_turn_off_is_screen_off(hass: HomeAssistant, tv: TVSimulator) -> None:
-    """turn_off = turn_screen_off (art-standby keeps the socket)."""
+async def test_turn_off_is_power_off(hass: HomeAssistant, tv: TVSimulator) -> None:
+    """turn_off = power_off, which works from the Screen Off state (#16)."""
     await _setup(hass, tv)
     await _call(hass, "turn_off")
-    tv.clients[0].turn_screen_off.assert_awaited_once()
+    tv.clients[0].power_off.assert_awaited_once()
+    tv.clients[0].turn_screen_off.assert_not_awaited()
 
 
 async def test_commands_blocked_when_device_off(

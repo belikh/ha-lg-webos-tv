@@ -287,12 +287,13 @@ async def test_turn_on_power_off_without_mac_warns(
     assert "no MAC address configured" in caplog.text
 
 
-async def test_turn_off_is_screen_off(integration: Any) -> None:
+async def test_turn_off_is_power_off(integration: Any) -> None:
     hass = integration.coordinator.hass
     await hass.services.async_call(
         "remote", "turn_off", {"entity_id": REMOTE}, blocking=True
     )
-    integration.tv.client.turn_screen_off.assert_awaited_once()
+    integration.tv.client.power_off.assert_awaited_once()
+    integration.tv.client.turn_screen_off.assert_not_awaited()
 
 
 async def test_is_on_mirrors_client(integration: Any) -> None:

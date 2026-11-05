@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.7
+
+### Fixed
+
+*   **Turn off fails from the Screen Off state.** `media_player.turn_off` and
+    `remote.turn_off` called `turn_screen_off`, which the TV rejects with
+    `The current state must be 'Active'` when it is already in Screen Off. Both
+    now call `power_off` (`system/turnOff`), as the core `webostv` integration
+    does. The **Turn screen off** button is unchanged (issue #16).
+
 ## 2.0.6
 
 ### Fixed

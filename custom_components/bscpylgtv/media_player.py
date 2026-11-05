@@ -378,13 +378,14 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, RestoreEntity, MediaPlayerEntity):
     @cmd
     @override
     async def async_turn_off(self) -> None:
-        """Turn the TV off.
+        """Turn the TV off (standby).
 
-        Follows webostv: ``turn_off`` = ``turn_screen_off`` (active
-        art-standby — the SSAP connection stays alive so the TV can be
-        interrogated and the screen re-woken remotely).
+        ``turn_screen_off`` fails with ``The current state must be 'Active'``
+        when the TV is already in the Screen Off state (issue #16), so this
+        sends ``system/turnOff`` through ``power_off``. The ``Turn screen
+        off`` button keeps the art-standby behaviour.
         """
-        await self.client.turn_screen_off()
+        await self.client.power_off()
 
     @cmd
     @override

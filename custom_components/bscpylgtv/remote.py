@@ -158,5 +158,5 @@ class BscpylgtvRemote(BscpylgtvEntity, RemoteEntity):
     @cmd
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn the device off (art-standby, same as the media player)."""
-        await self.client.turn_screen_off()
+        """Turn the device off (standby, same as the media player)."""
+        await self.client.power_off()

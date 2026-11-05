@@ -215,6 +215,7 @@ class MockWebOsClient:
         ok = {"returnValue": True}
         # Power / screen
         self.turn_screen_off = AsyncMock(return_value=ok)
+        self.power_off = AsyncMock(return_value=ok)
         self.turn_screen_on = AsyncMock(return_value=ok)
         self.reboot = AsyncMock(return_value=ok)
         self.get_power_state = AsyncMock(
