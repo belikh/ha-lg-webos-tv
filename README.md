@@ -35,20 +35,25 @@ access for power users.
 
 ### Home Assistant Marketplace / HACS (recommended)
 
+1. Open **Settings → Marketplace** on Home Assistant 2026.11+, or **HACS** on
+   older versions (HACS is only needed before 2026.11).
+2. Search for **LG WebOS TV (bscpylgtv)**.
+3. Click **Download** and choose the latest version.
+4. Restart Home Assistant.
+
+Updates appear under **Settings → Updates**.
+
 [![Open your Home Assistant instance and open a repository in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=belikh&repository=ha-lg-webos-tv&category=integration)
 
-Click the badge above. It opens the **Marketplace** on Home Assistant 2026.11+
-and **HACS** on older versions. Then:
+The badge above opens this repository directly in the Marketplace (2026.11+)
+or HACS (older versions).
 
-1. Click **Download** and choose the latest version.
-2. Restart Home Assistant.
+#### Fallback: custom repository
 
-Or add it by hand: on 2026.11+ open **Settings → Marketplace**; on older
-versions open **HACS** (HACS is only needed before 2026.11). Use the three dots
-(top right) → **Custom repositories**, add
+If the search returns no result, add the repository by hand. In the Marketplace
+or HACS, use the three dots (top right) → **Custom repositories**, add
 `https://github.com/belikh/ha-lg-webos-tv` with category **Integration**, then
-install **LG WebOS TV (bscpylgtv)** and restart Home Assistant. Updates appear
-under **Settings → Updates**.
+install **LG WebOS TV (bscpylgtv)** and restart Home Assistant.
 
 ### Manual
 
