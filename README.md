@@ -1,9 +1,6 @@
 # LG WebOS TV (bscpylgtv) for Home Assistant
 
-[![Open your Home Assistant instance and open a repository in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=belikh&repository=ha-lg-webos-tv&category=integration)
-[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=bscpylgtv)
-
-<!-- TODO: screenshots — add device dashboard and entity screenshots here -->
+[![Add to Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=belikh&repository=ha-lg-webos-tv&category=integration)
 
 A custom integration for controlling **LG TVs running webOS** in Home Assistant,
 built on the [`bscpylgtv`](https://github.com/chros73/bscpylgtv) library by
@@ -33,27 +30,10 @@ access for power users.
 
 ## Installation
 
-### Home Assistant Marketplace / HACS (recommended)
-
-1. Open **Settings → Marketplace** on Home Assistant 2026.11+, or **HACS** on
-   older versions (HACS is only needed before 2026.11).
-2. Search for **LG WebOS TV (bscpylgtv)**.
-3. Click **Download** and choose the latest version.
-4. Restart Home Assistant.
-
-Updates appear under **Settings → Updates**.
-
-[![Open your Home Assistant instance and open a repository in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=belikh&repository=ha-lg-webos-tv&category=integration)
-
-The badge above opens this repository directly in the Marketplace (2026.11+)
-or HACS (older versions).
-
-#### Fallback: custom repository
-
-If the search returns no result, add the repository by hand. In the Marketplace
-or HACS, use the three dots (top right) → **Custom repositories**, add
-`https://github.com/belikh/ha-lg-webos-tv` with category **Integration**, then
-install **LG WebOS TV (bscpylgtv)** and restart Home Assistant.
+1. Click the **Add to Home Assistant** button above and choose **Download**.
+2. Restart Home Assistant.
+3. Go to **Settings → Devices & Services**, add **LG WebOS TV (bscpylgtv)**
+   and accept the pairing prompt on the TV.
 
 ### Manual
 
@@ -64,8 +44,7 @@ install **LG WebOS TV (bscpylgtv)** and restart Home Assistant.
 
 ## Setup
 
-1. Go to **Settings → Devices & Services → Add Integration** (or use the
-   **Add integration** badge at the top of this page).
+1. Go to **Settings → Devices & Services → Add Integration**.
 2. Search for **LG WebOS TV (bscpylgtv)**.
    - If your TV is on the same network, Home Assistant usually discovers it
      automatically via SSDP and you can start from the discovery card.
