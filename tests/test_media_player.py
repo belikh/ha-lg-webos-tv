@@ -218,6 +218,36 @@ async def test_app_name_from_inputs_and_livetv(
     assert state.attributes["media_content_type"] == str(MediaType.CHANNEL)
 
 
+async def test_state_is_playing_on_live_tv(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Live TV reports PLAYING so the card shows prev/next (issue #18)."""
+    await _setup(hass, tv)
+    assert hass.states.get(MP).state == MediaPlayerState.ON
+    tv.current_appId = "com.webos.app.livetv"
+    tv.push_update()
+    await hass.async_block_till_done()
+    assert hass.states.get(MP).state == MediaPlayerState.PLAYING
+
+
+async def test_channel_subscription_retried_on_live_tv(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """A failed library subscription is retried (issue #17)."""
+    from unittest.mock import patch
+
+    from bscpylgtv.exceptions import PyLGTVCmdError
+
+    with patch("custom_components.bscpylgtv.coordinator.CHANNEL_SUBSCRIBE_DELAY", 0):
+        await _setup(hass, tv)
+        client = tv.clients[0]
+        client.subscribe_current_channel.side_effect = [PyLGTVCmdError("x"), None]
+        tv.current_appId = "com.webos.app.livetv"
+        tv.push_update()
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert client.subscribe_current_channel.await_count == 2
+
+
 async def test_app_name_falls_back_to_raw_id(
     hass: HomeAssistant, tv: TVSimulator
 ) -> None:

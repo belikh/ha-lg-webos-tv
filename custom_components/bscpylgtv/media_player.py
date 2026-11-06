@@ -244,10 +244,15 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, RestoreEntity, MediaPlayerEntity):
         reports STATE_ON in that state too (matching webostv, where only
         a full power-off is OFF). ``is_screen_on`` distinguishes the
         two for the screen entities (Cluster D).
+
+        Live TV reports PLAYING so the media card shows the previous/next
+        buttons, which map to channel down/up (issue #18).
         """
-        if self.client.is_on:
-            return MediaPlayerState.ON
-        return MediaPlayerState.OFF
+        if not self.client.is_on:
+            return MediaPlayerState.OFF
+        if self.client.current_appId == LIVE_TV_APP_ID:
+            return MediaPlayerState.PLAYING
+        return MediaPlayerState.ON
 
     @property
     @override

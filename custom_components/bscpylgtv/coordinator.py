@@ -41,7 +41,11 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from bscpylgtv import WebOsClient
-from bscpylgtv.exceptions import PyLGTVCmdError, PyLGTVPairException
+from bscpylgtv.exceptions import (
+    PyLGTVCmdError,
+    PyLGTVCmdException,
+    PyLGTVPairException,
+)
 from bscpylgtv.manifest import MANIFEST
 
 from .const import (
@@ -51,7 +55,10 @@ from .const import (
     CONF_UNSIGNED_MANIFEST,
     DISCONNECT_TIMEOUT,
     DOMAIN,
+    CHANNEL_SUBSCRIBE_ATTEMPTS,
+    CHANNEL_SUBSCRIBE_DELAY,
     HELLO_PROBE_TIMEOUT,
+    LIVE_TV_APP_ID,
     LOGGER,
     PROBE_TIMEOUT,
     RECONNECT_TIMEOUT,
@@ -402,6 +409,7 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
             update_interval=SCAN_INTERVAL,
         )
         self.client = client
+        self._channel_retry_task: asyncio.Task[None] | None = None
         self._reconnect_lock = asyncio.Lock()
 
     @property
@@ -429,8 +437,52 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
                 # A failing connection also fires callbacks during teardown;
                 # don't flip entities back to available on that noise.
                 self.async_set_updated_data(None)
+            self._async_ensure_channel_subscription(client)
         except Exception:  # noqa: BLE001 - shield the subscription task
             LOGGER.exception("Unexpected error in state update callback")
+
+    @callback
+    def _async_ensure_channel_subscription(self, client: WebOsClient) -> None:
+        """Retry the current-channel subscription when Live TV is foreground.
+
+        The library subscribes once, at the moment the foreground app flips
+        to Live TV. When the TV is not ready yet (for example after
+        switching from an external input) the call fails, the library
+        swallows the error and never retries, leaving ``current_channel``
+        unknown (belikh/ha-lg-webos-tv#17).
+        """
+        if (
+            client is not self.client
+            or client.current_appId != LIVE_TV_APP_ID
+            or client.current_channel is not None
+            or (self._channel_retry_task and not self._channel_retry_task.done())
+        ):
+            return
+        self._channel_retry_task = self.config_entry.async_create_background_task(
+            self.hass,
+            self._async_retry_channel_subscription(client),
+            f"{DOMAIN}_channel_subscription_{self.name}",
+        )
+
+    async def _async_retry_channel_subscription(self, client: WebOsClient) -> None:
+        """Subscribe to the current channel, retrying while Live TV starts."""
+        for _ in range(CHANNEL_SUBSCRIBE_ATTEMPTS):
+            await asyncio.sleep(CHANNEL_SUBSCRIBE_DELAY)
+            if (
+                client is not self.client
+                or client.current_appId != LIVE_TV_APP_ID
+                or client.current_channel is not None
+            ):
+                return
+            try:
+                await client.subscribe_current_channel(
+                    client.set_current_channel_state
+                )
+            except PyLGTVCmdException:
+                continue
+            except BSCP_CONNECTION_EXCEPTIONS:
+                return
+            return
 
     async def _async_is_alive(self) -> bool:
         """Probe the connection with a real, timeout-bounded request."""

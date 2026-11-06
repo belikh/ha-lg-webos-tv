@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.8
+
+### Fixed
+
+*   **Live TV state.** The media player reports `playing` instead of `on`
+    while Live TV is in the foreground, so the media card shows the
+    previous/next channel buttons (issue #18, suggested by @fast2doc).
+*   **Current channel stays unknown.** The library subscribes to the current
+    channel once, when the foreground app becomes Live TV, and does not retry
+    when the TV is not ready (for example after switching from an external
+    input). The coordinator now retries up to 6 times, 2 s apart (issue #17, reported by @fast2doc).
+
 ## 2.0.7
 
 ### Fixed
