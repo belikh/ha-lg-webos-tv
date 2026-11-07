@@ -19,17 +19,14 @@ body:
     id: integration_version
     attributes:
       label: Integration version
-      description: Shown in the diagnostics download under `versions.integration`.
+      description: Skip this if you attach the diagnostics file below, which lists it.
       placeholder: "2.0.9"
-    validations:
-      required: true
   - type: input
     id: ha_version
     attributes:
       label: Home Assistant version
+      description: Skip this if you attach the diagnostics file below.
       placeholder: "2026.11.0"
-    validations:
-      required: true
   - type: dropdown
     id: install
     attributes:
@@ -44,9 +41,7 @@ body:
     id: tv_model
     attributes:
       label: TV model and webOS version
-      description: "Settings > General > About This TV. Example: OLED55C2PUA, webOS 22 (04.20.35)."
-    validations:
-      required: true
+      description: "Skip this if you attach the diagnostics file below, except add the webOS version if the file has none. Find it under Settings > General > About This TV. Example: OLED55C2PUA, webOS 22 (04.20.35)."
   - type: textarea
     id: what_happened
     attributes:
@@ -90,7 +85,7 @@ body:
     attributes:
       label: Diagnostics file
       description: |
-        Open the TV's device page, choose **Download diagnostics**, and drag the JSON file here. It redacts the pairing key, IP address, MAC address and unique ID. It lists the current app and channel name, so remove those fields if they are private.
+        Attach this whenever the TV has a device page. It replaces the three version fields above. Open the device page, choose **Download diagnostics**, and drag the JSON file here. It lists the integration, library and Home Assistant versions and the TV model, plus the webOS version when the TV reports it. It redacts the pairing key, IP address, MAC address and unique ID. It lists the current app and channel name, so remove those fields if they are private.
       placeholder: Drag the diagnostics file here.
   - type: textarea
     id: extra

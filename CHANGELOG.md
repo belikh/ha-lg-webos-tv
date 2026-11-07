@@ -6,7 +6,8 @@
 
 *   **Issue forms.** Bug reports ask for the integration, Home Assistant and
     webOS versions, the TV model, a debug log and a diagnostics file. Feature
-    requests ask for the use case and TV model.
+    requests ask for the use case and TV model. The version and TV model
+    fields are optional when the diagnostics file is attached.
 *   **Diagnostics.** The download lists the integration, `bscpylgtv` and Home
     Assistant versions, and whether the current channel is set and the channel
     retry is running.
