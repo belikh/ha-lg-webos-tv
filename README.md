@@ -318,6 +318,33 @@ data:
   only rebuilt when the channel lineup actually changes; filter via
   `media_player.play_media` with a channel number if the dropdown is unwieldy.
 
+## Reporting a problem
+
+[Open an issue](https://github.com/belikh/ha-lg-webos-tv/issues/new/choose) and
+fill in the bug report form. It asks for the TV model, the webOS version and
+two files that let the maintainer see what the integration did:
+
+1. **Debug log.** Open **Settings > Devices & services > LG WebOS TV
+   (bscpylgtv)**, choose **Enable debug logging** from the three-dot menu,
+   repeat the problem, then choose **Disable debug logging**. The browser
+   downloads `home-assistant_bscpylgtv_<date>.log`. The log holds only the
+   period between the two clicks. The integration does not log the pairing
+   key, but connection errors from the library can include the TV's local IP
+   address, so read the file before posting.
+2. **Diagnostics.** Open the TV's device page and choose **Download
+   diagnostics**. The file lists the integration, library and Home Assistant
+   versions, the TV's model and power state, and the current app and channel.
+   It redacts the pairing key, IP address, MAC address and unique ID.
+
+To keep debug logging on across restarts, add this to `configuration.yaml`:
+
+```yaml
+logger:
+  logs:
+    custom_components.bscpylgtv: debug
+    bscpylgtv: debug
+```
+
 ## Known limitations
 
 - **Firmware updates are not possible via SSAP** — webOS exposes no

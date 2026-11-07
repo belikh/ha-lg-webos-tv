@@ -341,7 +341,7 @@ def update_client_key(
 ) -> None:
     """Persist a rotated client key into entry.data (never mutate in place)."""
     if client.client_key and client.client_key != entry.data.get(CONF_CLIENT_KEY):
-        LOGGER.debug("Updating client key for host %s", entry.data[CONF_HOST])
+        LOGGER.debug("Updating client key for %s", entry.title)
         hass.config_entries.async_update_entry(
             entry, data={**entry.data, CONF_CLIENT_KEY: client.client_key}
         )
@@ -383,7 +383,7 @@ def update_mac_address(
     """Self-heal the wake-on-LAN MAC from ``software_info['device_id']``."""
     device_id = extract_mac(client.software_info)
     if device_id and device_id != entry.data.get(CONF_MAC):
-        LOGGER.debug("Updating MAC address for host %s", entry.data[CONF_HOST])
+        LOGGER.debug("Updating MAC address for %s", entry.title)
         hass.config_entries.async_update_entry(
             entry, data={**entry.data, CONF_MAC: device_id}
         )
@@ -441,8 +441,13 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
         except Exception:  # noqa: BLE001 - shield the subscription task
             LOGGER.exception("Unexpected error in state update callback")
 
+    @property
+    def channel_retry_running(self) -> bool:
+        """Return True while the channel subscription retry task is active."""
+        return bool(self._channel_retry_task and not self._channel_retry_task.done())
+
     @staticmethod
-    def _has_channel(client: WebOsClient) -> bool:
+    def has_channel(client: WebOsClient) -> bool:
         """Return True when the client holds a usable current channel.
 
         The TV pushes an error payload through the old subscription when the
@@ -472,11 +477,15 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
         if (
             client is not self.client
             or client.current_appId != LIVE_TV_APP_ID
-            or self._has_channel(client)
+            or self.has_channel(client)
             or (self._channel_retry_task and not self._channel_retry_task.done())
         ):
             return
-        LOGGER.debug("Starting channel subscription retry for %s", self.name)
+        LOGGER.debug(
+            "Starting channel subscription retry for %s (current_channel: %s)",
+            self.name,
+            client.current_channel,
+        )
         self._channel_retry_task = self.config_entry.async_create_background_task(
             self.hass,
             self._async_retry_channel_subscription(client),
@@ -490,7 +499,7 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
             if (
                 client is not self.client
                 or client.current_appId != LIVE_TV_APP_ID
-                or self._has_channel(client)
+                or self.has_channel(client)
             ):
                 LOGGER.debug("Channel retry stopped before attempt %d", attempt)
                 return
@@ -499,7 +508,7 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
                 await client.subscribe_current_channel(
                     client.set_current_channel_state
                 )
-                if not self._has_channel(client):
+                if not self.has_channel(client):
                     # The subscription was accepted but sent no channel yet:
                     # read it once so the sensor does not wait for a change.
                     channel = await client.get_current_channel()
@@ -514,6 +523,11 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
                 LOGGER.debug("Current channel subscription failed: %s", err)
                 continue
             return
+        LOGGER.debug(
+            "Gave up on the channel subscription for %s after %d attempts",
+            self.name,
+            CHANNEL_SUBSCRIBE_ATTEMPTS,
+        )
 
     async def _async_is_alive(self) -> bool:
         """Probe the connection with a real, timeout-bounded request."""
@@ -554,6 +568,11 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
         """Abandon the current client and connect a fresh one (lock held)."""
         release_client(self.client)
         unsigned_preferred = self.config_entry.data.get(CONF_UNSIGNED_MANIFEST, False)
+        LOGGER.debug(
+            "Connecting to %s (unsigned manifest preferred: %s)",
+            self.name,
+            unsigned_preferred,
+        )
         self.client = await self._async_make_client()
         try:
             result = await async_connect_with_manifest_fallback(
@@ -564,16 +583,23 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
                 unsigned_preferred=unsigned_preferred,
             )
         except PyLGTVPairException as err:
+            LOGGER.debug("%s rejected the pairing key: %s", self.name, err)
             raise ConfigEntryAuthFailed(
                 translation_domain=DOMAIN,
                 translation_key="auth_failed",
                 translation_placeholders={"device": self.name},
             ) from err
-        except BSCP_CONNECTION_EXCEPTIONS:
+        except BSCP_CONNECTION_EXCEPTIONS as err:
             # The helper already abandoned the failed candidate(s); the
             # next watchdog tick builds another fresh client.
+            LOGGER.debug("Connecting to %s failed: %r", self.name, err)
             return False
         self.client = result.client
+        LOGGER.debug(
+            "Connected to %s (unsigned manifest: %s)",
+            self.name,
+            result.unsigned_manifest,
+        )
         update_manifest_mode(self.hass, self.config_entry, result.unsigned_manifest)
         update_client_key(self.hass, self.config_entry, self.client)
         update_mac_address(self.hass, self.config_entry, self.client)
@@ -583,6 +609,7 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
         """Watchdog tick: probe liveness, reconnect dead/zombie connections."""
         if await self._async_is_alive():
             return
+        LOGGER.debug("%s did not answer the liveness probe; reconnecting", self.name)
         async with self._reconnect_lock:
             # Another task may have reconnected while we waited for the lock.
             if await self._async_is_alive():

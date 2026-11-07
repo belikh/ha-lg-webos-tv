@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_MAC, CONF_UNIQUE_ID
+from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
+from homeassistant.loader import async_get_integration
 
 from bscpylgtv import WebOsClient
 
-from .const import CONF_CLIENT_KEY
-from .coordinator import BscpylgtvConfigEntry
+from .const import CONF_CLIENT_KEY, DOMAIN
+from .coordinator import BscpylgtvConfigEntry, BscpylgtvCoordinator
 
 # webostv diagnostics superset (plan AD-18): the pairing key, every
 # network identifier (current host, legacy v1 ip_address, unique_id,
@@ -38,10 +42,28 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: BscpylgtvConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
+    integration = await async_get_integration(hass, DOMAIN)
     return async_redact_data(
-        {"entry": entry.as_dict(), "client": _client_snapshot(entry)},
+        {
+            "versions": _versions(str(integration.version)),
+            "entry": entry.as_dict(),
+            "client": _client_snapshot(entry),
+        },
         TO_REDACT,
     )
+
+
+def _versions(integration_version: str) -> dict[str, str | None]:
+    """Return the versions a maintainer needs to read a bug report."""
+    try:
+        library = pkg_version("bscpylgtv")
+    except PackageNotFoundError:
+        library = None
+    return {
+        "integration": integration_version,
+        "bscpylgtv": library,
+        "home_assistant": HA_VERSION,
+    }
 
 
 def _client_snapshot(entry: BscpylgtvConfigEntry) -> dict[str, Any]:
@@ -73,6 +95,8 @@ def _client_snapshot(entry: BscpylgtvConfigEntry) -> dict[str, Any]:
             "software_info": None,
             "picture_settings": None,
             "current_channel": None,
+            "has_channel": None,
+            "channel_retry_running": None,
             "hello_info": None,
             "apps_count": 0,
             "inputs_count": 0,
@@ -92,6 +116,8 @@ def _client_snapshot(entry: BscpylgtvConfigEntry) -> dict[str, Any]:
         "software_info": client.software_info,
         "picture_settings": client.picture_settings,
         "current_channel": client.current_channel,
+        "has_channel": BscpylgtvCoordinator.has_channel(client),
+        "channel_retry_running": coordinator.channel_retry_running,
         "hello_info": client.hello_info,
         "apps_count": len(client.apps or {}),
         "inputs_count": len(client.inputs or {}),

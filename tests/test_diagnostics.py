@@ -110,6 +110,13 @@ async def test_diagnostics_redacts_every_sensitive_key(
     assert client["apps_count"] == 3
     assert client["inputs_count"] == 2
     assert client["channels_count"] == len(tv.channels)
+    # Versions let a maintainer read a bug report without asking for them.
+    versions = diagnostics["versions"]
+    assert set(versions) == {"integration", "bscpylgtv", "home_assistant"}
+    assert versions["integration"] and versions["home_assistant"]
+    # Channel state shows whether the 2.0.9 retry is the thing that is stuck.
+    assert client["has_channel"] is False
+    assert client["channel_retry_running"] is False
     # Non-sensitive live state survives.
     assert client["sound_output"] == "tv_speaker"
     assert client["volume"] == 12
@@ -132,5 +139,7 @@ async def test_diagnostics_entry_not_loaded_safe_snapshot(
     assert client["apps_count"] == 0
     assert client["inputs_count"] == 0
     assert client["channels_count"] == 0
+    assert client["has_channel"] is None
+    assert "versions" in diagnostics
     # The entry half is still present (and redacted where needed).
     assert diagnostics["entry"]["entry_id"] == entry.entry_id

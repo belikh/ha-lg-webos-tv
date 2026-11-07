@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+*   **Issue forms.** Bug reports ask for the integration, Home Assistant and
+    webOS versions, the TV model, a debug log and a diagnostics file. Feature
+    requests ask for the use case and TV model.
+*   **Diagnostics.** The download lists the integration, `bscpylgtv` and Home
+    Assistant versions, and whether the current channel is set and the channel
+    retry is running.
+*   **Debug log.** Connect, reconnect and liveness-probe failures and the end
+    of the channel retry are logged at debug level. The key and MAC update
+    lines name the TV instead of its IP address.
+*   **README.** "Reporting a problem" describes how to download the debug log
+    and diagnostics.
+
 ## 2.0.9
 
 ### Fixed

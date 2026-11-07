@@ -1,0 +1,28 @@
+name: Feature request
+description: Ask for a new entity, service or behavior.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to do
+      description: Describe the task in Home Assistant terms (an automation, a dashboard card, a voice command).
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: What you do today
+      description: The workaround you use now, if any.
+  - type: input
+    id: tv_model
+    attributes:
+      label: TV model and webOS version
+      placeholder: "OLED55C2PUA, webOS 22"
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: Known TV or library call
+      description: If you know the webOS service URI or the `bscpylgtv` method that does this, paste it. Output from the `command` service helps.

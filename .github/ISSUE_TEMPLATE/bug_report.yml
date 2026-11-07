@@ -1,0 +1,99 @@
+name: Bug report
+description: Something does not work, shows the wrong value or stops working.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [troubleshooting list](https://github.com/belikh/ha-lg-webos-tv#troubleshooting) and the [closed issues](https://github.com/belikh/ha-lg-webos-tv/issues?q=is%3Aissue) first. Many TV quirks are already covered there.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I am on the latest release (Settings > Devices & services > LG WebOS TV (bscpylgtv), or the update entity).
+          required: true
+        - label: I restarted Home Assistant after updating.
+          required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: Integration version
+      description: Shown in the diagnostics download under `versions.integration`.
+      placeholder: "2.0.9"
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.11.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - Home Assistant Marketplace
+        - HACS
+        - Manual copy into custom_components
+    validations:
+      required: true
+  - type: input
+    id: tv_model
+    attributes:
+      label: TV model and webOS version
+      description: "Settings > General > About This TV. Example: OLED55C2PUA, webOS 22 (04.20.35)."
+    validations:
+      required: true
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: What you saw, and the entity involved (for example `sensor.living_room_tv_current_channel`).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the TV state before you start (off, on HDMI 1, on Live TV) and whether you used the remote or Home Assistant.
+      placeholder: |
+        1. TV off while on HDMI 1
+        2. Turn on from Home Assistant
+        3. Switch to Live TV
+    validations:
+      required: true
+  - type: textarea
+    id: debug_log
+    attributes:
+      label: Debug log
+      description: |
+        1. Open Settings > Devices & services > LG WebOS TV (bscpylgtv) and choose **Enable debug logging** from the three-dot menu.
+        2. Repeat the steps above.
+        3. Choose **Disable debug logging**. Your browser downloads `home-assistant_bscpylgtv_<date>.log`.
+        4. Drag that file into this box, or paste the lines around the problem.
+
+        The integration does not log the pairing key. Connection errors from the library can include the TV's local IP address, so read the file before posting.
+      placeholder: Drag the log file here.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics file
+      description: |
+        Open the TV's device page, choose **Download diagnostics**, and drag the JSON file here. It redacts the pairing key, IP address, MAC address and unique ID. It lists the current app and channel name, so remove those fields if they are private.
+      placeholder: Drag the diagnostics file here.
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Other integrations that control the same TV (the built-in webostv integration, Node-RED, a Harmony), router or VLAN setup, TV settings such as Quick Start+.
