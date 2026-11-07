@@ -218,6 +218,7 @@ class MockWebOsClient:
         self.power_off = AsyncMock(return_value=ok)
         self.subscribe_current_channel = AsyncMock(return_value=None)
         self.set_current_channel_state = AsyncMock(return_value=None)
+        self.get_current_channel = AsyncMock(return_value=None)
         self.turn_screen_on = AsyncMock(return_value=ok)
         self.reboot = AsyncMock(return_value=ok)
         self.get_power_state = AsyncMock(

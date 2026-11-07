@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.9
+
+### Fixed
+
+*   **Current channel stays unknown after returning to Live TV.** After you
+    leave Live TV and come back, the TV sends an error through the old
+    channel subscription (`broadcastId ... is already closed`). The
+    bscpylgtv library stores that error as the current channel and never
+    subscribes again, so the channel sensor stayed `unknown` and 2.0.8 did
+    not retry. The coordinator now treats a payload without a channel number
+    or name as no channel, subscribes again, and reads the channel once if
+    the subscription sends none. The retry window is 15 attempts, 2 s apart
+    (was 6) (issue #17, reported by @fast2doc).
+
+### Notes
+
+*   This is a temporary workaround. The upstream fix is proposed in
+    [chros73/bscpylgtv#12](https://github.com/chros73/bscpylgtv/pull/12).
+    The workaround will be removed after a bscpylgtv release includes it.
+*   Checked on an LG TV with an IPTV channel: switching HDMI 3 to Live TV left
+    the sensor `unknown` for 50 s on 2.0.8 and filled it in about 4 s on 2.0.9.
+
 ## 2.0.8
 
 ### Fixed

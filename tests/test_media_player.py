@@ -248,6 +248,36 @@ async def test_channel_subscription_retried_on_live_tv(
     assert client.subscribe_current_channel.await_count == 2
 
 
+async def test_channel_error_payload_triggers_resubscribe(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """An error dict stored as current_channel is not a channel (issue #17).
+
+    The TV pushes it through the old subscription when the app leaves and
+    re-enters Live TV; the library keeps it and never resubscribes.
+    """
+    from unittest.mock import patch
+
+    with patch("custom_components.bscpylgtv.coordinator.CHANNEL_SUBSCRIBE_DELAY", 0):
+        await _setup(hass, tv)
+        client = tv.clients[0]
+        client.get_current_channel.return_value = {
+            "channelNumber": "106",
+            "channelName": "BBC News",
+        }
+        tv.current_channel = {
+            "returnValue": False,
+            "errorText": "broadcastId = x is already closed",
+        }
+        tv.current_appId = "com.webos.app.livetv"
+        tv.push_update()
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert client.subscribe_current_channel.await_count == 1
+    client.set_current_channel_state.assert_awaited_once_with(
+        {"channelNumber": "106", "channelName": "BBC News"}
+    )
+
+
 async def test_app_name_falls_back_to_raw_id(
     hass: HomeAssistant, tv: TVSimulator
 ) -> None:

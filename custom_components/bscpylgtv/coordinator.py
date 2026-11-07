@@ -441,6 +441,24 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
         except Exception:  # noqa: BLE001 - shield the subscription task
             LOGGER.exception("Unexpected error in state update callback")
 
+    @staticmethod
+    def _has_channel(client: WebOsClient) -> bool:
+        """Return True when the client holds a usable current channel.
+
+        The TV pushes an error payload through the old subscription when the
+        foreground app leaves and re-enters Live TV (``returnValue: False``,
+        "broadcastId ... is already closed"). The library stores that dict as
+        ``current_channel``, so ``is not None`` is not enough.
+
+        Temporary workaround: remove it once a bscpylgtv release includes
+        chros73/bscpylgtv#12, which drops the error payload in the library.
+        """
+        channel = client.current_channel
+        return isinstance(channel, Mapping) and any(
+            channel.get(key) not in (None, "")
+            for key in ("channelNumber", "channelName")
+        )
+
     @callback
     def _async_ensure_channel_subscription(self, client: WebOsClient) -> None:
         """Retry the current-channel subscription when Live TV is foreground.
@@ -454,10 +472,11 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
         if (
             client is not self.client
             or client.current_appId != LIVE_TV_APP_ID
-            or client.current_channel is not None
+            or self._has_channel(client)
             or (self._channel_retry_task and not self._channel_retry_task.done())
         ):
             return
+        LOGGER.debug("Starting channel subscription retry for %s", self.name)
         self._channel_retry_task = self.config_entry.async_create_background_task(
             self.hass,
             self._async_retry_channel_subscription(client),
@@ -466,22 +485,34 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
 
     async def _async_retry_channel_subscription(self, client: WebOsClient) -> None:
         """Subscribe to the current channel, retrying while Live TV starts."""
-        for _ in range(CHANNEL_SUBSCRIBE_ATTEMPTS):
+        for attempt in range(1, CHANNEL_SUBSCRIBE_ATTEMPTS + 1):
             await asyncio.sleep(CHANNEL_SUBSCRIBE_DELAY)
             if (
                 client is not self.client
                 or client.current_appId != LIVE_TV_APP_ID
-                or client.current_channel is not None
+                or self._has_channel(client)
             ):
+                LOGGER.debug("Channel retry stopped before attempt %d", attempt)
                 return
+            LOGGER.debug("Channel subscription attempt %d", attempt)
             try:
                 await client.subscribe_current_channel(
                     client.set_current_channel_state
                 )
+                if not self._has_channel(client):
+                    # The subscription was accepted but sent no channel yet:
+                    # read it once so the sensor does not wait for a change.
+                    channel = await client.get_current_channel()
+                    LOGGER.debug("get_current_channel returned %s", channel)
+                    if channel:
+                        await client.set_current_channel_state(channel)
             except PyLGTVCmdException:
                 continue
             except BSCP_CONNECTION_EXCEPTIONS:
                 return
+            except Exception as err:  # noqa: BLE001 - keep retrying
+                LOGGER.debug("Current channel subscription failed: %s", err)
+                continue
             return
 
     async def _async_is_alive(self) -> bool:

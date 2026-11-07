@@ -55,7 +55,7 @@ ATTR_SOUND_OUTPUT = "sound_output"
 LIVE_TV_APP_ID = "com.webos.app.livetv"
 
 # Retry schedule for the current-channel subscription (issue #17).
-CHANNEL_SUBSCRIBE_ATTEMPTS = 6
+CHANNEL_SUBSCRIBE_ATTEMPTS = 15
 CHANNEL_SUBSCRIBE_DELAY = 2.0
 
 # Exactly the library's default subscription set (webos_client.py). Do NOT
