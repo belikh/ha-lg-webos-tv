@@ -23,7 +23,7 @@ def test_domain_and_version() -> None:
 
 
 def test_requirements_pin_library() -> None:
-    assert MANIFEST["requirements"] == ["bscpylgtv @ https://github.com/belikh/bscpylgtv/archive/refs/tags/v0.5.5.post1.zip"]
+    assert MANIFEST["requirements"] == ["bscpylgtv@https://github.com/belikh/bscpylgtv/archive/refs/tags/v0.5.5.post1.zip"]
 
 
 def test_ownership_and_docs_urls() -> None:
