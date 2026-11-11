@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.1.0-beta.1 (experimental)
+
+### Changed
+
+*   **Volume on external outputs.** On `external_arc`, `external_optical` and
+    `external_speaker` the media player no longer offers a volume slider or
+    shows a volume level, because the TV only counts key presses and cannot
+    read the soundbar. Volume up, down and mute still reach the soundbar.
+    Fixes #20.
+
+### Added
+
+*   **Experimental soundbar volume.** An option (off by default) restores the
+    slider on those outputs by pressing volume-down to the soundbar's minimum
+    and then volume-up to the target. Options: press interval (default
+    320 ms), extra volume-down presses (default 5) and soundbar steps
+    (default 40). The level shown is an estimate.
+
 ## 2.0.10
 
 ### Added

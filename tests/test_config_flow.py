@@ -770,7 +770,13 @@ async def test_options_live_sources_and_preselect(
         result["flow_id"], {CONF_SOURCES: ["YouTube", "HDMI 1"], CONF_MAC: ""}
     )
     assert result["type"] == "create_entry"
-    assert entry.options == {CONF_SOURCES: ["YouTube", "HDMI 1"]}
+    assert entry.options == {
+        CONF_SOURCES: ["YouTube", "HDMI 1"],
+        "soundbar_volume": False,
+        "soundbar_step_interval_ms": 320,
+        "soundbar_extra_down_presses": 5,
+        "soundbar_max_steps": 40,
+    }
     # Drain the OptionsFlowWithReload task so teardown cannot cancel a
     # pending config-entry reload mid-setup.
     await hass.async_block_till_done()
@@ -933,4 +939,35 @@ async def test_options_sources_cached_across_invalid_mac(
     assert factory.await_count == 1
     assert result["type"] == "create_entry"
     # Drain the scheduled OptionsFlowWithReload task (see above).
+    await hass.async_block_till_done()
+
+
+async def test_options_saves_soundbar_settings(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """The experimental soundbar options are stored as integers."""
+    entry = build_mock_config_entry(hass, host=HOST)
+    client = _runtime_client(tv)
+    with patch(
+        "custom_components.bscpylgtv.config_flow.make_runtime_client",
+        AsyncMock(return_value=client),
+    ):
+        result = await _open_options(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SOURCES: ["YouTube"],
+            CONF_MAC: "",
+            "soundbar_volume": True,
+            "soundbar_step_interval_ms": 400.0,
+            "soundbar_extra_down_presses": 3.0,
+            "soundbar_max_steps": 30.0,
+        },
+    )
+    assert result["type"] == "create_entry"
+    assert entry.options["soundbar_volume"] is True
+    assert entry.options["soundbar_step_interval_ms"] == 400
+    assert entry.options["soundbar_extra_down_presses"] == 3
+    assert entry.options["soundbar_max_steps"] == 30
+    assert isinstance(entry.options["soundbar_step_interval_ms"], int)
     await hass.async_block_till_done()

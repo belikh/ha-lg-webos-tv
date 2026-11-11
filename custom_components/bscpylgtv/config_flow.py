@@ -26,6 +26,7 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_HOST, CONF_MAC
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import selector
 from homeassistant.helpers.service_info.ssdp import (
     ATTR_UPNP_FRIENDLY_NAME,
     ATTR_UPNP_UDN,
@@ -39,11 +40,18 @@ from .const import (
     BSCP_CONNECTION_EXCEPTIONS,
     COMMAND_TIMEOUT,
     CONF_CLIENT_KEY,
+    CONF_SOUNDBAR_EXTRA_DOWN_PRESSES,
+    CONF_SOUNDBAR_MAX_STEPS,
+    CONF_SOUNDBAR_STEP_INTERVAL_MS,
+    CONF_SOUNDBAR_VOLUME,
     CONF_SOURCES,
     CONF_UNSIGNED_MANIFEST,
     CONFIG_ENTRY_MINOR_VERSION,
     CONFIG_ENTRY_VERSION,
     DEFAULT_NAME,
+    DEFAULT_SOUNDBAR_EXTRA_DOWN_PRESSES,
+    DEFAULT_SOUNDBAR_MAX_STEPS,
+    DEFAULT_SOUNDBAR_STEP_INTERVAL_MS,
     DISCONNECT_TIMEOUT,
     DOMAIN,
     LIVE_TV_APP_ID,
@@ -492,6 +500,21 @@ class BscpylgtvConfigFlow(ConfigFlow, domain=DOMAIN):
         return await _async_pair(self.hass, host)
 
 
+def _number_box(
+    minimum: int, maximum: int, unit: str | None
+) -> selector.NumberSelector:
+    """Return an integer box selector for the soundbar options."""
+    config = selector.NumberSelectorConfig(
+        min=minimum,
+        max=maximum,
+        step=1,
+        mode=selector.NumberSelectorMode.BOX,
+    )
+    if unit is not None:
+        config["unit_of_measurement"] = unit
+    return selector.NumberSelector(config)
+
+
 class BscpylgtvOptionsFlow(OptionsFlowWithReload):
     """Handle the options flow (enabled sources + manual MAC)."""
 
@@ -523,7 +546,30 @@ class BscpylgtvOptionsFlow(OptionsFlowWithReload):
                     # data update itself.
                     self.hass.config_entries.async_update_entry(entry, data=data)
                 return self.async_create_entry(
-                    title="", data={CONF_SOURCES: user_input[CONF_SOURCES]}
+                    title="",
+                    data={
+                        CONF_SOURCES: user_input[CONF_SOURCES],
+                        CONF_SOUNDBAR_VOLUME: user_input.get(
+                            CONF_SOUNDBAR_VOLUME, False
+                        ),
+                        CONF_SOUNDBAR_STEP_INTERVAL_MS: int(
+                            user_input.get(
+                                CONF_SOUNDBAR_STEP_INTERVAL_MS,
+                                DEFAULT_SOUNDBAR_STEP_INTERVAL_MS,
+                            )
+                        ),
+                        CONF_SOUNDBAR_EXTRA_DOWN_PRESSES: int(
+                            user_input.get(
+                                CONF_SOUNDBAR_EXTRA_DOWN_PRESSES,
+                                DEFAULT_SOUNDBAR_EXTRA_DOWN_PRESSES,
+                            )
+                        ),
+                        CONF_SOUNDBAR_MAX_STEPS: int(
+                            user_input.get(
+                                CONF_SOUNDBAR_MAX_STEPS, DEFAULT_SOUNDBAR_MAX_STEPS
+                            )
+                        ),
+                    },
                 )
 
         if self._sources is None:
@@ -548,6 +594,30 @@ class BscpylgtvOptionsFlow(OptionsFlowWithReload):
                 vol.Optional(
                     CONF_MAC, description={"suggested_value": entry.data.get(CONF_MAC)}
                 ): cv.string,
+                vol.Optional(
+                    CONF_SOUNDBAR_VOLUME,
+                    default=entry.options.get(CONF_SOUNDBAR_VOLUME, False),
+                ): bool,
+                vol.Optional(
+                    CONF_SOUNDBAR_STEP_INTERVAL_MS,
+                    default=entry.options.get(
+                        CONF_SOUNDBAR_STEP_INTERVAL_MS,
+                        DEFAULT_SOUNDBAR_STEP_INTERVAL_MS,
+                    ),
+                ): _number_box(100, 2000, "ms"),
+                vol.Optional(
+                    CONF_SOUNDBAR_EXTRA_DOWN_PRESSES,
+                    default=entry.options.get(
+                        CONF_SOUNDBAR_EXTRA_DOWN_PRESSES,
+                        DEFAULT_SOUNDBAR_EXTRA_DOWN_PRESSES,
+                    ),
+                ): _number_box(0, 100, None),
+                vol.Optional(
+                    CONF_SOUNDBAR_MAX_STEPS,
+                    default=entry.options.get(
+                        CONF_SOUNDBAR_MAX_STEPS, DEFAULT_SOUNDBAR_MAX_STEPS
+                    ),
+                ): _number_box(5, 100, None),
             }
         )
         return self.async_show_form(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -157,6 +158,195 @@ async def test_features_external_speaker(hass: HomeAssistant, tv: TVSimulator) -
         MediaPlayerEntityFeature.VOLUME_MUTE | MediaPlayerEntityFeature.VOLUME_STEP
     )
     assert features(hass) == expected
+
+
+async def test_external_arc_hides_volume_level(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """external_arc: step and mute only, no absolute set and no level."""
+    tv.software_info = {**tv.software_info, "device_id": "webos-device"}
+    await _setup(hass, tv)
+    tv.volume = 33
+    tv.sound_output = "external_arc"
+    tv.push_update()
+    await hass.async_block_till_done()
+    expected = BASE_FEATURES | (
+        MediaPlayerEntityFeature.VOLUME_MUTE | MediaPlayerEntityFeature.VOLUME_STEP
+    )
+    assert features(hass) == expected
+    assert "volume_level" not in hass.states.get(MP).attributes
+
+
+async def test_tv_speaker_keeps_volume_level(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """tv_speaker: slider and level stay."""
+    tv.software_info = {**tv.software_info, "device_id": "webos-device"}
+    await _setup(hass, tv)
+    tv.volume = 33
+    tv.sound_output = "tv_speaker"
+    tv.push_update()
+    await hass.async_block_till_done()
+    assert features(hass) == BASE_FEATURES | VOLUME_FEATURES
+    assert hass.states.get(MP).attributes["volume_level"] == 0.33
+
+
+# ---------------------------------------------------------------------------
+# Experimental soundbar volume (options, off by default)
+# ---------------------------------------------------------------------------
+
+SOUNDBAR_OPTIONS = {
+    "soundbar_volume": True,
+    "soundbar_step_interval_ms": 1,
+    "soundbar_extra_down_presses": 2,
+    "soundbar_max_steps": 40,
+}
+
+
+async def _setup_soundbar(
+    hass: HomeAssistant, tv: TVSimulator, **overrides: Any
+) -> None:
+    """Set up with the experimental soundbar mode on an ARC output."""
+    tv.software_info = {**tv.software_info, "device_id": "webos-device"}
+    tv.sound_output = "external_arc"
+    await _setup(hass, tv, options={**SOUNDBAR_OPTIONS, **overrides})
+
+
+async def test_soundbar_mode_off_by_default(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Without the option an ARC output keeps step and mute only."""
+    tv.software_info = {**tv.software_info, "device_id": "webos-device"}
+    tv.sound_output = "external_arc"
+    await _setup(hass, tv)
+    assert MediaPlayerEntityFeature.VOLUME_SET not in features(hass)
+    assert "volume_level" not in hass.states.get(MP).attributes
+    assert "soundbar_steps" not in hass.states.get(MP).attributes
+
+
+async def test_soundbar_mode_adds_volume_set_on_arc(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """The slider returns on ARC, with no level until the first set."""
+    await _setup_soundbar(hass, tv)
+    assert MediaPlayerEntityFeature.VOLUME_SET in features(hass)
+    attrs = hass.states.get(MP).attributes
+    assert "volume_level" not in attrs
+    assert attrs["soundbar_steps"] is None
+
+
+async def test_soundbar_mode_ignored_on_tv_speaker(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """On the TV speaker the normal volume path is used."""
+    tv.software_info = {**tv.software_info, "device_id": "webos-device"}
+    tv.sound_output = "tv_speaker"
+    await _setup(hass, tv, options=SOUNDBAR_OPTIONS)
+    await _call(hass, "volume_set", volume_level=0.5)
+    client = tv.clients[0]
+    client.set_volume.assert_awaited_once_with(50)
+    client.volume_down.assert_not_awaited()
+    client.volume_up.assert_not_awaited()
+
+
+async def test_soundbar_set_homes_from_max_then_steps_up(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Unknown level: home from max_steps plus the extra presses, then step."""
+    await _setup_soundbar(hass, tv)
+    await _call(hass, "volume_set", volume_level=0.5)
+    client = tv.clients[0]
+    assert client.volume_down.await_count == 40 + 2
+    assert client.volume_up.await_count == 20
+    attrs = hass.states.get(MP).attributes
+    assert attrs["volume_level"] == 0.5
+    assert attrs["soundbar_steps"] == 20
+
+
+async def test_soundbar_set_homes_from_believed_level_plus_extra(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Known level: presses down by the believed level plus the extra."""
+    await _setup_soundbar(hass, tv, soundbar_extra_down_presses=3)
+    await _call(hass, "volume_set", volume_level=0.5)
+    client = tv.clients[0]
+    client.volume_down.reset_mock()
+    client.volume_up.reset_mock()
+    await _call(hass, "volume_set", volume_level=0.25)
+    assert client.volume_down.await_count == 20 + 3
+    assert client.volume_up.await_count == 10
+    assert hass.states.get(MP).attributes["soundbar_steps"] == 10
+
+
+async def test_soundbar_set_zero_only_homes(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Target 0 sends the homing presses and no up presses."""
+    await _setup_soundbar(hass, tv)
+    await _call(hass, "volume_set", volume_level=0.0)
+    client = tv.clients[0]
+    assert client.volume_down.await_count == 42
+    client.volume_up.assert_not_awaited()
+    assert hass.states.get(MP).attributes["volume_level"] == 0.0
+
+
+async def test_soundbar_max_steps_option_scales_target(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """The slider maps 0..1 onto 0..max_steps."""
+    await _setup_soundbar(hass, tv, soundbar_max_steps=30)
+    await _call(hass, "volume_set", volume_level=0.5)
+    client = tv.clients[0]
+    assert client.volume_down.await_count == 30 + 2
+    assert client.volume_up.await_count == 15
+
+
+async def test_soundbar_step_keys_move_believed_level(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """Volume up/down keep a known estimate in step; unknown stays unknown."""
+    await _setup_soundbar(hass, tv)
+    await _call(hass, "volume_up")
+    assert hass.states.get(MP).attributes["soundbar_steps"] is None
+    await _call(hass, "volume_set", volume_level=0.5)
+    await _call(hass, "volume_up")
+    await _call(hass, "volume_up")
+    await _call(hass, "volume_down")
+    assert hass.states.get(MP).attributes["soundbar_steps"] == 21
+
+
+async def test_soundbar_newer_set_supersedes_running_one(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """A second set stops the first after its current press."""
+    await _setup_soundbar(hass, tv, soundbar_step_interval_ms=20)
+    first = hass.async_create_task(
+        hass.services.async_call(
+            "media_player",
+            "volume_set",
+            {"entity_id": MP, "volume_level": 1.0},
+            blocking=True,
+        )
+    )
+    await asyncio.sleep(0.1)
+    await _call(hass, "volume_set", volume_level=0.0)
+    await first
+    client = tv.clients[0]
+    # The first run was cut short: never reached 40 up presses.
+    assert client.volume_up.await_count < 40
+    assert hass.states.get(MP).attributes["soundbar_steps"] == 0
+
+
+async def test_soundbar_set_when_tv_off_raises(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """The off-TV guard applies to every press."""
+    await _setup_soundbar(hass, tv)
+    tv.power_state = {"state": "Power Off"}
+    tv.push_update()
+    await hass.async_block_till_done()
+    with pytest.raises(HomeAssistantError):
+        await _call(hass, "volume_set", volume_level=0.5)
 
 
 async def test_features_lineout(hass: HomeAssistant, tv: TVSimulator) -> None:

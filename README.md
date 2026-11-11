@@ -132,7 +132,38 @@ by Wi-Fi*) in the TV's own settings and try again.
 
 The integration's **Configure** flow lets you pick which **sources** (apps and
 inputs) appear in the media player's source list, and set the **MAC address**
-manually if it was never auto-detected.
+manually if it was never auto-detected. It also holds the experimental
+soundbar volume settings below.
+
+### Soundbar volume (experimental, off by default)
+
+On an ARC, optical or external-speaker sound output the TV forwards volume
+up, down and mute to the soundbar but cannot read or set its level. The media
+player therefore shows no volume level and no slider on those outputs, and
+`volume_up`, `volume_down` and `volume_mute` still reach the soundbar.
+
+Turn on **Experimental: soundbar volume by key presses** in the options to get
+the slider back. Setting a volume then presses volume-down until the soundbar
+is at its minimum, and presses volume-up once per step to the target. The
+level shown is the integration's estimate, not a reading from the soundbar.
+
+| Option | Default | Meaning |
+|---|---|---|
+| Soundbar press interval | 320 ms | Time between key presses. Presses sent faster than the soundbar accepts are lost. |
+| Extra volume-down presses when homing | 5 | Added to the estimated level when pressing down, so the soundbar still reaches its minimum if the estimate is too high. Each one adds one interval to every volume change. |
+| Soundbar volume steps | 40 | Steps from minimum to maximum. The slider maps 0 to 100 % onto 0 to this value. |
+
+How it behaves:
+
+- The first set after a restart homes from the full step count, because the
+  estimate starts empty.
+- A newer volume set stops the one still running after its current press.
+- Changing the volume with the soundbar's own remote, or with the TV remote,
+  is not tracked. The next set re-homes using the extra presses.
+- Setting 50 % on 40 steps takes about (estimate + 5 + 20) × 320 ms.
+- Measured on an LG SN4 over ARC (15 presses from 0): 13 reached at 220 and
+  240 ms, 15 at 267 and 370 ms, and 30 of 30 at 320 ms. Test your own
+  soundbar before lowering the interval.
 
 ## Services
 

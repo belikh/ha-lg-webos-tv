@@ -171,13 +171,21 @@
       "init": {
         "data": {
           "mac": "MAC address",
-          "sources": "Sources list"
+          "sources": "Sources list",
+          "soundbar_volume": "Experimental: soundbar volume by key presses",
+          "soundbar_step_interval_ms": "Soundbar press interval (ms)",
+          "soundbar_extra_down_presses": "Extra volume-down presses when homing",
+          "soundbar_max_steps": "Soundbar volume steps (0 to max)"
         },
         "data_description": {
           "mac": "MAC address of the TV, used to send wake-on-LAN packets so the TV can be turned on. This is normally detected automatically; only set it manually if turning the TV on does not work, e.g. when the TV was switched off during setup.",
-          "sources": "List of sources to show in the media player source list"
+          "sources": "List of sources to show in the media player source list",
+          "soundbar_volume": "Off by default. On an ARC, optical or external speaker output the TV cannot read or set the soundbar volume. When on, setting the media player volume presses volume-down until the soundbar is at its minimum, then volume-up to the target. The level shown is an estimate and goes wrong when the soundbar's own remote is used.",
+          "soundbar_step_interval_ms": "Time between key presses. Presses sent faster than the soundbar can take are lost; an LG SN4 lost steps at 220 to 240 ms and kept up at 267 ms and above.",
+          "soundbar_extra_down_presses": "Added to the believed level when homing, so the soundbar still reaches its minimum if the believed level is too high. Each extra press adds one interval to every volume change.",
+          "soundbar_max_steps": "Number of volume steps on the soundbar, so that the slider maps 0 to 100% onto 0 to this value. LG soundbars use 40."
         },
-        "description": "Select the sources to show for this TV. Set the MAC address only if the TV could not be turned on automatically.",
+        "description": "Select the sources to show for this TV. Set the MAC address only if the TV could not be turned on automatically. The soundbar options are experimental.",
         "title": "LG WebOS TV (bscpylgtv) options"
       }
     }

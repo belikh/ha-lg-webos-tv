@@ -33,8 +33,16 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .const import (
     ATTR_PAYLOAD,
     ATTR_SOUND_OUTPUT,
+    ATTR_SOUNDBAR_STEPS,
     CONF_MAC,
+    CONF_SOUNDBAR_EXTRA_DOWN_PRESSES,
+    CONF_SOUNDBAR_MAX_STEPS,
+    CONF_SOUNDBAR_STEP_INTERVAL_MS,
+    CONF_SOUNDBAR_VOLUME,
     CONF_SOURCES,
+    DEFAULT_SOUNDBAR_EXTRA_DOWN_PRESSES,
+    DEFAULT_SOUNDBAR_MAX_STEPS,
+    DEFAULT_SOUNDBAR_STEP_INTERVAL_MS,
     DOMAIN,
     LIVE_TV_APP_ID,
     LOGGER,
@@ -55,6 +63,13 @@ SUPPORT_BSCP = (
     | MediaPlayerEntityFeature.PLAY
     | MediaPlayerEntityFeature.STOP
 )
+
+# Sound outputs where the TV owns the volume and can set it absolutely.
+ABSOLUTE_VOLUME_OUTPUTS = frozenset({"tv_speaker", "headphone"})
+
+# Outputs where the TV forwards volume presses to an external device and does
+# not know its level. The experimental soundbar mode applies to these only.
+STEPPED_OUTPUTS = frozenset({"external_arc", "external_optical", "external_speaker"})
 
 SUPPORT_BSCP_VOLUME = (
     MediaPlayerEntityFeature.VOLUME_MUTE | MediaPlayerEntityFeature.VOLUME_STEP
@@ -114,6 +129,11 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, RestoreEntity, MediaPlayerEntity):
         self._current_source: str | None = None
         self._source_list: dict[str, dict[str, Any]] = {}
         self._supported_features: MediaPlayerEntityFeature = MediaPlayerEntityFeature(0)
+        # Experimental soundbar volume: the level the integration believes the
+        # soundbar is at, in soundbar steps (None until first set).
+        self._soundbar_steps: int | None = None
+        self._soundbar_lock = asyncio.Lock()
+        self._soundbar_seq = 0
         self._update_supported_features()
         self._update_sources()
 
@@ -153,12 +173,28 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, RestoreEntity, MediaPlayerEntity):
         if not client.is_on and self._supported_features:
             return
         supported = SUPPORT_BSCP
-        if client.sound_output == "external_speaker":
-            # Volume can be stepped/muted but not set absolutely.
-            supported |= SUPPORT_BSCP_VOLUME
-        elif client.sound_output != "lineout":
+        output = client.sound_output
+        if output in ABSOLUTE_VOLUME_OUTPUTS or output is None:
             supported |= SUPPORT_BSCP_VOLUME | MediaPlayerEntityFeature.VOLUME_SET
+        elif output != "lineout":
+            # External device (soundbar, ARC, optical, Bluetooth): the TV
+            # forwards volume up/down and mute but does not know the level.
+            supported |= SUPPORT_BSCP_VOLUME
+            if self._soundbar_volume_active:
+                supported |= MediaPlayerEntityFeature.VOLUME_SET
         self._supported_features = supported
+
+    @property
+    def _soundbar_volume_active(self) -> bool:
+        """Return True when the experimental soundbar mode applies now."""
+        return bool(
+            self._entry.options.get(CONF_SOUNDBAR_VOLUME, False)
+            and self.client.sound_output in STEPPED_OUTPUTS
+        )
+
+    def _soundbar_option(self, key: str, default: int) -> int:
+        """Return an integer soundbar option."""
+        return int(self._entry.options.get(key, default))
 
     def _update_sources(self) -> None:
         """Rebuild the title -> app/input resolve map (webostv pattern).
@@ -290,7 +326,21 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, RestoreEntity, MediaPlayerEntity):
     @property
     @override
     def volume_level(self) -> float | None:
-        """Return the volume level (0..1)."""
+        """Return the volume level (0..1), None on an external output.
+
+        With the experimental soundbar mode the level is the integration's
+        own estimate in soundbar steps, never a reading from the soundbar.
+        """
+        if self._soundbar_volume_active:
+            if self._soundbar_steps is None:
+                return None
+            max_steps = self._soundbar_option(
+                CONF_SOUNDBAR_MAX_STEPS, DEFAULT_SOUNDBAR_MAX_STEPS
+            )
+            return self._soundbar_steps / max_steps
+        output = self.client.sound_output
+        if output is not None and output not in ABSOLUTE_VOLUME_OUTPUTS:
+            return None
         if (volume := self.client.volume) is None:
             return None
         return float(volume) / 100.0
@@ -343,7 +393,10 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, RestoreEntity, MediaPlayerEntity):
         """
         if (sound_output := self.client.sound_output) is None:
             return {}
-        return {ATTR_SOUND_OUTPUT: sound_output}
+        attributes: dict[str, Any] = {ATTR_SOUND_OUTPUT: sound_output}
+        if self._soundbar_volume_active:
+            attributes[ATTR_SOUNDBAR_STEPS] = self._soundbar_steps
+        return attributes
 
     @override
     async def async_turn_on(self) -> None:
@@ -397,22 +450,99 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, RestoreEntity, MediaPlayerEntity):
     async def async_volume_up(self) -> None:
         """Turn volume up for media player."""
         await self.client.volume_up()
+        self._track_soundbar_press(up=True)
 
     @cmd
     @override
     async def async_volume_down(self) -> None:
         """Turn volume down for media player."""
         await self.client.volume_down()
+        self._track_soundbar_press(up=False)
 
-    @cmd
+    def _track_soundbar_press(self, *, up: bool) -> None:
+        """Move the believed soundbar level by one step (known level only)."""
+        if self._soundbar_steps is None or not self._soundbar_volume_active:
+            return
+        max_steps = self._soundbar_option(
+            CONF_SOUNDBAR_MAX_STEPS, DEFAULT_SOUNDBAR_MAX_STEPS
+        )
+        self._soundbar_steps = max(
+            0, min(max_steps, self._soundbar_steps + (1 if up else -1))
+        )
+        self.async_write_ha_state()
+
     @override
     async def async_set_volume_level(self, volume: float) -> None:
-        """Set the volume level, range 0..1.
+        """Set the volume level, range 0..1."""
+        if self._soundbar_volume_active:
+            await self._async_set_soundbar_level(volume)
+        else:
+            await self._async_set_tv_volume(volume)
+
+    @cmd
+    async def _async_set_tv_volume(self, volume: float) -> None:
+        """Set the TV's own volume.
 
         The library only clamps at 0, so the 0..100 range is enforced
         integration-side.
         """
         await self.client.set_volume(max(0, min(100, round(volume * 100))))
+
+    @cmd
+    async def _async_press_volume(self, *, up: bool) -> None:
+        """Send one volume key press (retried once after a reconnect)."""
+        if up:
+            await self.client.volume_up()
+        else:
+            await self.client.volume_down()
+
+    async def _async_set_soundbar_level(self, volume: float) -> None:
+        """Experimental: set the soundbar level by pressing volume keys.
+
+        Presses volume-down for the believed level plus the configured
+        extra presses (the soundbar stops at its minimum), then volume-up
+        for the target number of steps, one press per configured interval.
+        A newer call supersedes a running one: the old sequence stops
+        after its current press and the believed level stays accurate.
+        """
+        max_steps = self._soundbar_option(
+            CONF_SOUNDBAR_MAX_STEPS, DEFAULT_SOUNDBAR_MAX_STEPS
+        )
+        interval = (
+            self._soundbar_option(
+                CONF_SOUNDBAR_STEP_INTERVAL_MS, DEFAULT_SOUNDBAR_STEP_INTERVAL_MS
+            )
+            / 1000
+        )
+        extra = self._soundbar_option(
+            CONF_SOUNDBAR_EXTRA_DOWN_PRESSES, DEFAULT_SOUNDBAR_EXTRA_DOWN_PRESSES
+        )
+        target = max(0, min(max_steps, round(volume * max_steps)))
+
+        self._soundbar_seq += 1
+        seq = self._soundbar_seq
+        async with self._soundbar_lock:
+            if seq != self._soundbar_seq:
+                return
+            believed = (
+                max_steps if self._soundbar_steps is None else self._soundbar_steps
+            )
+            self._soundbar_steps = believed
+            presses = [False] * (believed + extra) + [True] * target
+            loop = asyncio.get_running_loop()
+            next_at = loop.time()
+            for index, up in enumerate(presses):
+                if seq != self._soundbar_seq:
+                    return
+                await self._async_press_volume(up=up)
+                assert self._soundbar_steps is not None
+                self._soundbar_steps = max(
+                    0, min(max_steps, self._soundbar_steps + (1 if up else -1))
+                )
+                self.async_write_ha_state()
+                next_at += interval
+                if index < len(presses) - 1:
+                    await asyncio.sleep(max(0.0, next_at - loop.time()))
 
     @cmd
     @override

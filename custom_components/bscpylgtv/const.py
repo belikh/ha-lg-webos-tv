@@ -46,11 +46,24 @@ CONF_CLIENT_KEY = "client_key"
 CONF_UNSIGNED_MANIFEST = "unsigned_manifest"
 CONF_SOURCES = "sources"
 
+# Experimental soundbar volume (config-entry options, off by default). On an
+# ARC/optical output the TV only counts key presses and cannot read or set
+# the soundbar level, so the media player homes the soundbar with volume-down
+# presses and steps up to the target (see media_player.py).
+CONF_SOUNDBAR_VOLUME = "soundbar_volume"
+CONF_SOUNDBAR_STEP_INTERVAL_MS = "soundbar_step_interval_ms"
+CONF_SOUNDBAR_EXTRA_DOWN_PRESSES = "soundbar_extra_down_presses"
+CONF_SOUNDBAR_MAX_STEPS = "soundbar_max_steps"
+DEFAULT_SOUNDBAR_STEP_INTERVAL_MS = 320
+DEFAULT_SOUNDBAR_EXTRA_DOWN_PRESSES = 5
+DEFAULT_SOUNDBAR_MAX_STEPS = 40
+
 # Attributes shared across platforms/services.
 ATTR_BUTTON = "button"
 ATTR_COMMAND = "command"
 ATTR_PAYLOAD = "payload"
 ATTR_SOUND_OUTPUT = "sound_output"
+ATTR_SOUNDBAR_STEPS = "soundbar_steps"
 
 LIVE_TV_APP_ID = "com.webos.app.livetv"
 
