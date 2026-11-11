@@ -425,7 +425,7 @@ class BscpylgtvCoordinator(DataUpdateCoordinator[None]):
         closeout, ``asyncio.gather`` on push), so this must stay a plain
         coroutine function — returning a Task would make the library's
         ``create_task`` raise. On 0.5.3 the same shape crashed teardown on
-        Python 3.11+; this integration pins 0.5.5.
+        Python 3.11+; this integration pins the belikh fork 0.5.5.post1.
 
         Exception-shielded: the library's ``callback_handler`` only catches
         ``CancelledError``, so a callback exception would kill the

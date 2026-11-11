@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0-beta.2 (experimental)
+
+### Fixed
+
+*   **Hang when the TV turns off.** `bscpylgtv` 0.5.5 awaited `disconnect()`
+    inside the power-state callback. The connection teardown waits for that
+    callback and swallows the cancel `disconnect()` forwards to it, so both
+    waited forever. The client then stopped updating and Python logged
+    "Task was destroyed but it is pending". The integration now depends on the
+    `belikh/bscpylgtv` fork (0.5.5.post1), which runs `disconnect()` as a
+    separate task. Addresses #19.
+
 ## 2.1.0-beta.1 (experimental)
 
 ### Changed
