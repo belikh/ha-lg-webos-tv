@@ -768,6 +768,18 @@ async def test_turn_off_is_power_off(hass: HomeAssistant, tv: TVSimulator) -> No
     tv.clients[0].turn_screen_off.assert_not_awaited()
 
 
+async def test_turn_off_when_already_off_is_noop(
+    hass: HomeAssistant, tv: TVSimulator
+) -> None:
+    """turn_off on an off TV does nothing and raises no error (#21)."""
+    await _setup(hass, tv)
+    tv.power_state = {"state": "Power Off"}
+    tv.push_update()
+    await hass.async_block_till_done()
+    await _call(hass, "turn_off")
+    tv.clients[0].power_off.assert_not_awaited()
+
+
 async def test_commands_blocked_when_device_off(
     hass: HomeAssistant, tv: TVSimulator
 ) -> None:

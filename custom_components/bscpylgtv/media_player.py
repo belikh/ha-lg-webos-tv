@@ -442,7 +442,11 @@ class BscpylgtvMediaPlayer(BscpylgtvEntity, RestoreEntity, MediaPlayerEntity):
         when the TV is already in the Screen Off state (issue #16), so this
         sends ``system/turnOff`` through ``power_off``. The ``Turn screen
         off`` button keeps the art-standby behaviour.
+
+        Does nothing when the TV is already off or disconnected (#21).
         """
+        if not self.client.is_on:
+            return
         await self.client.power_off()
 
     @cmd

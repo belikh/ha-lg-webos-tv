@@ -20,7 +20,7 @@ from .const import BSCP_EXCEPTIONS, COMMAND_TIMEOUT, DOMAIN, LOGGER
 from .coordinator import BscpylgtvConfigEntry, BscpylgtvCoordinator
 
 # Commands that must bypass the device-off guard: WOL turn_on works while
-# the TV is off, and turn_off on an off TV is a harmless no-op server-side.
+# the TV is off, and turn_off on an off TV is skipped inside the method.
 _OFF_GUARD_EXEMPT = frozenset({"async_turn_on", "async_turn_off"})
 
 

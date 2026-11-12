@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.0-beta.3 (experimental)
+
+### Fixed
+
+*   **Error when turning off a TV that is already off.** `turn_off` on the
+    media player and the remote now does nothing when the TV is off or
+    disconnected, so automations no longer fail with "Not connected, can't
+    execute command". Fixes #21.
+
 ## 2.1.0-beta.2 (experimental)
 
 ### Fixed
