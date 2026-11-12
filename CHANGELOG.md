@@ -1,5 +1,42 @@
 # Changelog
 
+## 2.1.0
+
+The integration depends on the `belikh/bscpylgtv` fork (0.5.5.post1) from this
+release on. It carries the standby fix below until chros73/bscpylgtv#13 is
+merged upstream.
+
+### Fixed
+
+*   **Hang when the TV turns off.** `bscpylgtv` 0.5.5 awaited `disconnect()`
+    inside the power-state callback, so the client stopped updating and Python
+    logged "Task was destroyed but it is pending". The fork runs
+    `disconnect()` as a separate task. Fixes #19.
+*   **Error when turning off a TV that is already off.** `turn_off` on the
+    media player and the remote does nothing when the TV is off or
+    disconnected, so automations no longer fail with "Not connected, can't
+    execute command". Fixes #21.
+
+### Changed
+
+*   **Volume on external outputs.** On `external_arc`, `external_optical` and
+    `external_speaker` the media player no longer offers a volume slider or
+    shows a volume level, because the TV only counts key presses and cannot
+    read the soundbar. Volume up, down and mute still reach the soundbar.
+    Fixes #20.
+
+### Added
+
+*   **Experimental soundbar volume.** An option (off by default) restores the
+    slider on those outputs by pressing volume-down to the soundbar's minimum
+    and then volume-up to the target. Options: press interval (default
+    320 ms), extra volume-down presses (default 5) and soundbar steps
+    (default 40). The level shown is an estimate.
+
+## Pre-releases of 2.1.0
+
+The entries below record each beta.
+
 ## 2.1.0-beta.3 (experimental)
 
 ### Fixed
