@@ -1,102 +1,82 @@
+<p align="right">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/belikh/design/main/packages/graphics/logo/jupiter-logo-dark.svg">
+    <img alt="jupiter.au" src="https://raw.githubusercontent.com/belikh/design/main/packages/graphics/logo/jupiter-logo-light.svg" width="260">
+  </picture>
+</p>
+
 # LG WebOS TV (bscpylgtv) for Home Assistant
 
-[![Add to Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=belikh&repository=ha-lg-webos-tv&category=integration)
+A Home Assistant integration for LG TVs running webOS. It uses the [`bscpylgtv`](https://github.com/chros73/bscpylgtv) library by [chros73](https://github.com/chros73) and keeps one websocket connection open to the TV, so state changes arrive as they happen instead of being polled.
 
-A custom integration for controlling **LG TVs running webOS** in Home Assistant,
-built on the [`bscpylgtv`](https://github.com/chros73/bscpylgtv) library by
-[chros73](https://github.com/chros73).
+The design follows the built-in Home Assistant `webostv` integration. On top of that it adds picture calibration sliders, picture mode, sound output and channel selects, power-state and channel sensors, a remote with pointer and text input, screen notifications and raw SSAP commands.
 
-The integration keeps a persistent websocket connection to the TV and receives
-state updates as they happen (push, not polling). Its architecture closely
-follows the built-in Home Assistant `webostv` integration — thanks to the HA
-core webostv maintainers for the reference implementation — while exposing the
-additional surface the `bscpylgtv` library offers: picture calibration sliders,
-picture mode / sound output / channel selects, power-state and channel sensors,
-a full remote with pointer and text input, screen notifications, and raw SSAP
-access for power users.
+<p>
+  <a href="#install">Install</a> ·
+  <a href="#set-up">Set up</a> ·
+  <a href="#turn-the-tv-on">Turn the TV on</a> ·
+  <a href="#entities">Entities</a> ·
+  <a href="#services">Services</a> ·
+  <a href="#troubleshooting">Troubleshooting</a> ·
+  <a href="#develop">Develop</a>
+</p>
+
+<br>
+
+---
+
+<br>
 
 ## Features
 
-- **Setup via UI** with SSDP auto-discovery and TV-prompt pairing (no PIN codes).
-- **Push updates** over a supervised websocket connection with automatic
-  reconnect and self-healing after TV restarts or network hiccups.
-- **Turn TV on** via Wake-on-LAN (automatic MAC detection when available).
-- **Reauth & reconfigure flows** for pairing-key loss and IP/host changes.
-- **Diagnostics** with sensitive data redacted.
-- Entities across media player, remote, notify, button, number, select, sensor
-  and switch platforms (see the table below).
-- Six integration services for advanced control, including raw SSAP commands
-  and screenshots.
+- Setup from the UI with SSDP discovery. Pairing is a prompt on the TV; PIN pairing is not supported.
+- Push updates over a supervised websocket that reconnects after TV restarts and network drops.
+- Turn on through Wake-on-LAN, with the MAC address detected when the TV reports it.
+- Reauthentication when the pairing key is lost, and reconfigure when the host changes.
+- Diagnostics download with sensitive data redacted.
+- Entities on the media player, remote, notify, button, number, select, sensor and switch platforms.
+- Six services, including raw SSAP commands and screenshots.
 
-## Installation
+<br>
 
-1. Click the **Add to Home Assistant** button above and choose **Download**,
-   or search for **LG WebOS TV (bscpylgtv)** in the Marketplace or HACS.
+## Install
+
+With HACS:
+
+[![Add to Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=belikh&repository=ha-lg-webos-tv&category=integration)
+
+1. Select the button above and choose **Download**, or search for **LG WebOS TV (bscpylgtv)** in HACS.
 2. Restart Home Assistant.
-3. Go to **Settings → Devices & Services**, add **LG WebOS TV (bscpylgtv)**
-   and accept the pairing prompt on the TV.
 
-### Manual
+If the search finds nothing, open HACS, choose the three dots at the top right, then **Custom repositories**. Add `https://github.com/belikh/ha-lg-webos-tv` with category **Integration**, install it and restart.
 
-1. Download the `custom_components/bscpylgtv` folder from this repository.
-2. Copy it into the `custom_components` directory of your Home Assistant
-   configuration.
-3. Restart Home Assistant.
+Manually: copy the `custom_components/bscpylgtv` folder from this repository into the `custom_components` directory of your Home Assistant configuration, then restart.
 
-### Custom repository (fallback)
+<br>
 
-If the search returns nothing, open the Marketplace or HACS, use the three dots
-(top right) → **Custom repositories**, add
-`https://github.com/belikh/ha-lg-webos-tv` with category **Integration**, then
-install **LG WebOS TV (bscpylgtv)** and restart Home Assistant.
+## Set up
 
-## Setup
+1. Go to **Settings > Devices & Services > Add Integration** and search for **LG WebOS TV (bscpylgtv)**. If the TV is on the same network, Home Assistant usually offers it as a discovered device.
+2. Enter the hostname or IP address of the TV. The TV must be on.
+3. Accept the pairing prompt on the TV screen.
 
-1. Go to **Settings → Devices & Services → Add Integration**.
-2. Search for **LG WebOS TV (bscpylgtv)**.
-   - If your TV is on the same network, Home Assistant usually discovers it
-     automatically via SSDP and you can start from the discovery card.
-3. Enter the hostname or IP address of your TV and submit. The TV must be
-   **turned on**.
-4. **Accept the pairing prompt on the TV** — a confirmation appears on screen.
-   Pairing happens via the TV prompt; PIN-based pairing is not supported.
-5. The TV appears as a device with all entities attached.
+The TV then appears as a device with its entities.
 
-If the TV stops accepting the stored pairing key, Home Assistant starts a
-**re-authentication** flow automatically — just accept the new prompt on the TV.
-If the TV's IP address changes, use **Reconfigure** on the config entry (or let
-discovery update it).
+If the TV stops accepting the stored pairing key, Home Assistant starts reauthentication. Accept the new prompt on the TV. If the IP address changes, use **Reconfigure** on the config entry, or let discovery update it.
 
-## Turning the TV on — Wake-on-LAN / MAC address
+<br>
 
-webOS TVs cannot be woken over their websocket API, so turning the TV **on**
-uses a Wake-on-LAN (WOL) magic packet:
+## Turn the TV on
 
-- The TV's **MAC address is detected automatically** when the TV reports it
-  during pairing or reconnects. Some webOS 26 sets do not provide this
-  information in compatibility mode; an existing or manually entered MAC
-  continues to work.
-- When a MAC address is known, the media player and remote entities offer
-  `turn_on`, and while the TV is off its entities stay available and simply
-  show *off*.
-- **No MAC address → no `turn_on`.** This happens when the TV was off or
-  unreachable during setup, or when the TV does not report its MAC. Add the
-  MAC manually:
-  open the integration's **Configure** (options) flow and enter the MAC
-  address (format `aa:bb:cc:dd:ee:ff`). You find it in the TV's network
-  settings or in your router.
+webOS TVs cannot be woken over their websocket API, so `turn_on` sends a Wake-on-LAN magic packet (UDP, port 9) to the TV's MAC address. The TV's network stack wakes it even though the websocket is down.
 
-How WOL works: the integration broadcasts a UDP magic packet (port 9) to the
-local network addressed to the TV's MAC; the TV's network stack wakes it even
-though the websocket is down.
+- The MAC address is detected when the TV reports it during pairing or on reconnect. Some webOS 26 sets do not report it in compatibility mode. A MAC address that is already stored or entered by hand keeps working.
+- With a MAC address, the media player and remote offer `turn_on`, and their entities show *off* instead of *unavailable* while the TV is off.
+- Without a MAC address there is no `turn_on`. This happens when the TV was off or unreachable during setup, or does not report its MAC. Open the integration's **Configure** flow and enter it as `aa:bb:cc:dd:ee:ff`. You can find it in the TV's network settings or in your router.
 
-**Wake timing varies.** Validated on a real OLED48CXPTA: after a full
-power-off (websocket gone within ~1 s) a **single WOL packet woke the TV**,
-but the TV took a couple of minutes before it accepted SSAP connections
-again. The integration keeps probing and reconnects automatically the
-moment the TV is back — no Home Assistant restart, no reload. If wake
-never happens on your set, enable **General → Quick Start+** (or *Turn On
-by Wi-Fi*) in the TV's own settings and try again.
+Wake timing varies. On an OLED48CXPTA, a single packet woke the TV after a full power-off, but it took a couple of minutes before it accepted connections. The integration keeps probing and reconnects when the TV is back, without a restart or reload. If the TV never wakes, enable **General > Quick Start+** (or *Turn On by Wi-Fi*) in the TV's own settings.
+
+<br>
 
 ## Entities
 
@@ -124,11 +104,15 @@ by Wi-Fi*) in the TV's own settings and try again.
 | `switch` | TPC | Config | **disabled** | Temporal Peak Luminance Control (OLED burn-in protection) |
 | `switch` | GSR | Config | **disabled** | Global Sticky Reduction (OLED burn-in protection) |
 
-> **Caution:** TPC and GSR are OLED panel-protection mechanisms. Disabling
+> [!WARNING]
+> TPC and GSR are OLED panel-protection mechanisms. Disabling
 > them may increase burn-in risk. The switches and calibration numbers are
 > disabled by default — enable them on the entity's settings page.
 
-### Options
+<br>
+
+## Configuration
+
 
 The integration's **Configure** flow lets you pick which **sources** (apps and
 inputs) appear in the media player's source list, and set the **MAC address**
@@ -165,10 +149,11 @@ How it behaves:
   240 ms, 15 at 267 and 370 ms, and 30 of 30 at 320 ms. Test your own
   soundbar before lowering the interval.
 
+<br>
+
 ## Services
 
-All services target the `media_player` entity of the TV. Names and descriptions
-are also visible in the UI's developer tools.
+All services target the `media_player` entity of the TV. The UI's developer tools show the same names and descriptions.
 
 ### `bscpylgtv.button`
 
@@ -268,7 +253,7 @@ data:
     contrast: 80
 ```
 
-### Standard services worth knowing
+### Standard services
 
 ```yaml
 # launch an app via the standard media_player service
@@ -297,7 +282,11 @@ data:
     icon: /media/dinner.png
 ```
 
+<br>
+
 ## Troubleshooting
+
+<details><summary><b>Pairing, firmware and connection problems</b></summary>
 
 - **Pairing fails or loops** — make sure the TV is on and you accept the
   prompt within the timeout. If the TV keeps rejecting a stale key, start the
@@ -349,7 +338,9 @@ data:
   only rebuilt when the channel lineup actually changes; filter via
   `media_player.play_media` with a channel number if the dropdown is unwieldy.
 
-## Reporting a problem
+</details>
+
+### Report a problem
 
 [Open an issue](https://github.com/belikh/ha-lg-webos-tv/issues/new/choose) and
 fill in the bug report form. It asks for the TV model, the webOS version and
@@ -376,6 +367,8 @@ logger:
     bscpylgtv: debug
 ```
 
+<br>
+
 ## Known limitations
 
 - **Firmware updates are not possible via SSAP** — webOS exposes no
@@ -388,30 +381,34 @@ logger:
 - TPC/GSR switch state reads are best-effort and may show *unknown* on some
   models.
 
-## Removing the integration
+<br>
 
-Open **Settings → Devices & Services**, open the **LG WebOS TV (bscpylgtv)**
-entry, click the three dots → **Delete**. This removes the config entry, its
-device and entities. Optionally also remove the integration files (Marketplace/HACS or
-`custom_components/bscpylgtv`) and restart Home Assistant. Old pairing files
-(`.storage/bscpylgtv_*.sqlite`) from v1 can be deleted manually.
+## Remove
 
-## Development
+Open **Settings > Devices & Services**, open the **LG WebOS TV (bscpylgtv)** entry, choose the three dots, then **Delete**. This removes the config entry, its device and its entities. To remove the code too, uninstall through HACS or delete `custom_components/bscpylgtv`, then restart. Old pairing files from v1 (`.storage/bscpylgtv_*.sqlite`) can be deleted by hand.
 
-Tests run against a pinned Home Assistant version with
-[uv](https://docs.astral.sh/uv/):
+<br>
 
-```bash
+## Develop
+
+Tests run against a pinned Home Assistant version with [uv](https://docs.astral.sh/uv/):
+
+```sh
 uv sync          # create .venv from uv.lock
-uv run pytest    # 300+ tests
+uv run pytest
 uv run ruff check custom_components tests
 uv run mypy
 ```
 
-`pyproject.toml` carries the dev dependency group (pytest-homeassistant-custom-component,
-bscpylgtv, ruff, mypy) and `uv.lock` pins the full tree, so the suite is
-reproducible. After bumping the `bscpylgtv` pin in `manifest.json`, update the
-dev group and run `uv lock` in the same change.
+`pyproject.toml` holds the dev dependency group (pytest-homeassistant-custom-component, bscpylgtv, ruff, mypy) and `uv.lock` pins the full tree. After changing the `bscpylgtv` pin in `manifest.json`, update the dev group and run `uv lock` in the same change.
+
+<br>
+
+## Licence
+
+MIT. See [LICENSE](LICENSE). Release history is in [CHANGELOG.md](CHANGELOG.md).
+
+<br>
 
 ## Credits
 
@@ -434,3 +431,7 @@ dev group and run `uv lock` in the same change.
 - **@frenck** — security reviews that prompted `is_allowed_path` validation
   on the `take_screenshot` filename and notify `icon` path, and removing the
   screenshot button that wrote into the publicly served `www` directory.
+
+<br>
+
+<p align="right"><sub>jupiter.au</sub></p>
