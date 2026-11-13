@@ -155,6 +155,7 @@ SOUND_OUTPUTS: tuple[str, ...] = (
     "external_arc",
     "external_speaker",
     "tv_external_speaker",
+    "tv_speaker_external_arc",
     "lineout",
     "headphone",
     "bt_soundbar",

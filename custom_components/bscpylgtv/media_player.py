@@ -69,7 +69,15 @@ ABSOLUTE_VOLUME_OUTPUTS = frozenset({"tv_speaker", "headphone"})
 
 # Outputs where the TV forwards volume presses to an external device and does
 # not know its level. The experimental soundbar mode applies to these only.
-STEPPED_OUTPUTS = frozenset({"external_arc", "external_optical", "external_speaker"})
+STEPPED_OUTPUTS = frozenset(
+    {
+        "external_arc",
+        "external_optical",
+        "external_speaker",
+        "tv_external_speaker",
+        "tv_speaker_external_arc",
+    }
+)
 
 SUPPORT_BSCP_VOLUME = (
     MediaPlayerEntityFeature.VOLUME_MUTE | MediaPlayerEntityFeature.VOLUME_STEP

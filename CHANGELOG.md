@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.1-beta.1 (experimental)
+
+### Added
+
+*   **WOW Orchestra output.** The sound-output select lists
+    `tv_speaker_external_arc` (TV speakers plus a soundbar on HDMI ARC). The TV
+    already reported it as the current output but it could not be selected.
+    The media player treats it and `tv_external_speaker` like `external_arc`:
+    no volume slider, volume keys go to the soundbar.
+
 ## 2.1.0
 
 The integration depends on the `belikh/bscpylgtv` fork (0.5.5.post1) from this
