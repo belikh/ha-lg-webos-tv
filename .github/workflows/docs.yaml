@@ -1,0 +1,68 @@
+name: Docs
+
+# Validates docs-src, checks that docs/*.md is current and builds the site.
+# The generator is jupiter-docs from belikh/docs; the design system comes from the latest belikh/design release.
+on:
+  push:
+    branches: [main, bscpylgtv-integration]
+    paths:
+      - 'docs-src/**'
+      - 'docs/**'
+      - 'docs.config.json'
+      - 'README.rst'
+      - 'custom_components/bscpylgtv/manifest.json'
+      - '.github/workflows/docs.yaml'
+  pull_request:
+    paths:
+      - 'docs-src/**'
+      - 'docs/**'
+      - 'docs.config.json'
+      - 'README.rst'
+      - 'custom_components/bscpylgtv/manifest.json'
+      - '.github/workflows/docs.yaml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: Check docs
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      JUPITER_DESIGN_DIR: ${{ github.workspace }}/.jupiter-docs/vendor/design
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Checkout generator
+        uses: actions/checkout@v4
+        with:
+          repository: belikh/docs
+          path: .jupiter-docs
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install generator and design system
+        working-directory: .jupiter-docs
+        run: |
+          npm ci
+          npm run update:design
+
+      - name: Validate pages and wording
+        run: node .jupiter-docs/packages/docs/bin/jupiter-docs.mjs check
+
+      - name: Check README wording
+        run: node .jupiter-docs/packages/docs/bin/jupiter-docs.mjs voice README.rst
+
+      - name: Check docs/*.md is current
+        run: node .jupiter-docs/packages/docs/bin/jupiter-docs.mjs build --check
+
+      - name: Build site
+        run: node .jupiter-docs/packages/docs/bin/jupiter-docs.mjs build --site

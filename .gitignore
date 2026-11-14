@@ -14,3 +14,5 @@ venv/
 .mypy_cache/
 .ruff_cache/
 www/
+dist/
+.jupiter-docs/

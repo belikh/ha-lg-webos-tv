@@ -1,0 +1,27 @@
+---
+title: Options
+summary: The Configure flow, with the source list, MAC address and soundbar volume settings and their defaults.
+order: 40
+audience: users
+status: draft
+---
+
+Open **Settings > Devices & Services > LG WebOS TV (bscpylgtv)** and choose **Configure**.
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| Sources list | multi-select | all sources | Apps and inputs shown in the media player source list. |
+| MAC address | text | detected | Address for [[term:Wake-on-LAN]], format `aa:bb:cc:dd:ee:ff`. Set it only when detection failed. |
+| Experimental: soundbar volume by key presses | boolean | off | Restores a volume slider on external sound outputs. |
+| Soundbar press interval (ms) | number | 320 | Time between key presses. Faster presses are lost. |
+| Extra volume-down presses when homing | number | 5 | Added to the estimated level when pressing down, so the soundbar reaches its minimum if the estimate is too high. Each one adds one interval to every volume change. |
+| Soundbar volume steps (0 to max) | number | 40 | Steps from minimum to maximum. The slider maps 0 to 100 % onto 0 to this value. LG soundbars use 40. |
+
+An invalid MAC address fails with `Invalid MAC address. Use the format aa:bb:cc:dd:ee:ff.`
+
+Option keys in the config entry are `sources`, `soundbar_volume`, `soundbar_step_interval_ms`, `soundbar_extra_down_presses` and `soundbar_max_steps`. The entry data holds `host`, `mac`, `client_key` and `unsigned_manifest`.
+
+:::see-also
+- [[guides/soundbar-volume]]
+- [[guides/turn-on]]
+:::

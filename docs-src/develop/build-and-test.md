@@ -1,0 +1,38 @@
+---
+title: Build and test
+summary: Run the tests, lint and type checks against the pinned Home Assistant version.
+order: 10
+audience: developers
+status: draft
+---
+
+Tests run against a pinned Home Assistant version with [uv](https://docs.astral.sh/uv/).
+
+```sh title="Check the project"
+uv sync                                       # create .venv from uv.lock
+uv run pytest
+uv run ruff check custom_components tests
+uv run mypy
+```
+
+`pyproject.toml` holds the dev dependency group: pytest-homeassistant-custom-component, bscpylgtv, ruff and mypy. `uv.lock` pins the full tree.
+
+After you change the `bscpylgtv` pin in `custom_components/bscpylgtv/manifest.json`, update the dev group and run `uv lock` in the same change. The pin points at the `belikh/bscpylgtv` fork (0.5.5.post1), which carries a standby fix until chros73/bscpylgtv#13 merges upstream.
+
+## Layout
+
+| File | Purpose |
+| --- | --- |
+| `__init__.py` | Entry setup and unload. |
+| `coordinator.py` | Client ownership, subscriptions, watchdog. |
+| `config_flow.py` | Setup, pairing, reauth, reconfigure, options. |
+| `media_player.py`, `remote.py`, `notify.py` | Main platforms and the service methods. |
+| `button.py`, `number.py`, `select.py`, `sensor.py`, `switch.py` | Other platforms. |
+| `services.py`, `services.yaml` | Service registration. |
+| `diagnostics.py` | Diagnostics with redaction. |
+| `const.py` | Constants, sound output list, picture mode fallback. |
+| `translations/en.json` | All user-facing strings. |
+
+:::see-also
+- [[develop/release]]
+:::

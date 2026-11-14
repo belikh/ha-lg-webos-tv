@@ -1,0 +1,19 @@
+{
+  "project": "LG WebOS TV (bscpylgtv)",
+  "id": "lg-webos-tv",
+  "description": "Home Assistant integration for LG webOS TVs, built on the bscpylgtv library with one push websocket per TV.",
+  "icon": "monitor",
+  "versionFrom": "custom_components/bscpylgtv/manifest.json",
+  "repo": "https://github.com/belikh/ha-lg-webos-tv",
+  "siteUrl": "https://docs.jupiter.au/lg-webos-tv",
+  "author": "belikh",
+  "pdf": "lg-webos-tv.pdf",
+  "hero": "spot/summit",
+  "glossary": {
+    "SSAP": "Second Screen Application Protocol, the websocket API a webOS TV exposes to companion apps. The integration sends every command through it.",
+    "Pairing key": "The client key a TV issues after you accept the pairing prompt. Home Assistant stores it in the config entry and sends it on every connection.",
+    "Wake-on-LAN": "A UDP magic packet sent to the TV's MAC address. It is the only way to turn a webOS TV on from Home Assistant.",
+    "ARC": "Audio Return Channel, the HDMI path that carries TV audio to a soundbar.",
+    "Compatibility mode": "Registration with an unsigned manifest. The integration switches to it when a webOS 26 TV rejects the signed manifest."
+  }
+}
