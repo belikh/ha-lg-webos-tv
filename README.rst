@@ -70,7 +70,7 @@ Set up
 
 The TV then appears as a device with its entities. `Set up a TV <https://docs.jupiter.au/lg-webos-tv/start/set-up/>`__ covers reauthentication and a changed IP address.
 
-``turn_on`` sends a Wake-on-LAN packet to the MAC address of the TV, because webOS cannot be woken over its websocket. If the MAC address was not detected, enter it in **Configure**. See `Turn the TV on <https://docs.jupiter.au/lg-webos-tv/guides/turn-on/>`__.
+``turn_on`` sends a Wake-on-LAN packet to the MAC address of the TV, because the websocket is closed while the TV is off. If the MAC address was not detected, enter it in **Configure**. Wi-Fi may need a setting on the TV. See `Turn the TV on <https://docs.jupiter.au/lg-webos-tv/guides/turn-on/>`__.
 
 |
 

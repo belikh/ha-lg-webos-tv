@@ -29,7 +29,7 @@ A key the TV no longer accepts raises reauthentication.
 
 ## Power and wake
 
-The TV closes its websocket in standby, so the integration cannot turn it on over SSAP. `turn_on` sends [[term:Wake-on-LAN]] to UDP port 9 and asks the coordinator to reconnect as soon as the TV boots. The watchdog keeps retrying every 10 s in any case. In art standby (`Screen Off`) the socket stays open, so a command can wake the screen.
+The websocket is closed while the TV is off, so `turn_on` cannot use it. `turn_on` sends [[term:Wake-on-LAN]] to UDP port 9 and asks the coordinator to reconnect as soon as the TV boots. The watchdog keeps retrying every 10 s in any case. In art standby (`Screen Off`) the socket stays open, so a command can wake the screen.
 
 ## Entity availability
 

@@ -3,7 +3,7 @@
 # Limitations
 
 - **Firmware updates.** webOS has no firmware-update API for websocket clients. Update from the settings of the TV.
-- **Turn on.** It works only through [Wake-on-LAN](../reference/glossary.md#term-wake-on-lan). The websocket `power_on` call is dead on current webOS.
+- **Turn on.** The integration turns the TV on with [Wake-on-LAN](../reference/glossary.md#term-wake-on-lan) and does not use the websocket power-on call. Wake-on-LAN over Wi-Fi needs a setting on the TV. See [Turn the TV on](../guides/turn-on.md).
 - **PIN pairing.** Pairing always uses the prompt on the TV.
 - **Luna-only endpoints.** The `command` service cannot read their return values (library limitation).
 - **TPC and GSR state.** Reads are best-effort and show `unknown` on some models.

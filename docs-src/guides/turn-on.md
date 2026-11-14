@@ -6,7 +6,7 @@ audience: users
 status: draft
 ---
 
-`turn_on` sends a [[term:Wake-on-LAN]] magic packet (UDP, port 9) to the MAC address of the TV. A webOS TV cannot be woken over its websocket API, so this is the only way.
+`turn_on` sends a [[term:Wake-on-LAN]] magic packet (UDP, port 9) to the MAC address of the TV. The websocket is closed while the TV is off, so the packet is the wake method the integration uses.
 
 ## Check that turn on is offered
 
@@ -22,6 +22,15 @@ The media player and the remote offer `turn_on` only when a MAC address is store
 3. Enter the address in **MAC address** and submit.
 
 An invalid value fails with `Invalid MAC address. Use the format aa:bb:cc:dd:ee:ff.` A stored or hand-entered address keeps working.
+
+## Wi-Fi connections
+
+Wake-on-LAN reaches a TV on Ethernet without a setting change. On Wi-Fi, the TV needs one of these settings enabled, or it may not wake from a full power-off:
+
+- **General > Quick Start+**
+- **Turn On by Wi-Fi**
+
+The menu names differ by model and firmware. A TV on Wi-Fi may also take longer to wake than one on Ethernet.
 
 ## Wake timing
 
