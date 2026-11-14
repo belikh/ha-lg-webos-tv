@@ -3,6 +3,13 @@
   "id": "lg-webos-tv",
   "description": "Home Assistant integration for LG webOS TVs, built on the bscpylgtv library with one push websocket per TV.",
   "icon": "monitor",
+  "sections": [
+    { "id": "start", "title": "Start", "summary": "Install the integration and pair your TV." },
+    { "id": "guides", "title": "Guides", "summary": "Common tasks, as numbered steps." },
+    { "id": "reference", "title": "Reference", "summary": "Entities, attributes and configuration options." },
+    { "id": "concepts", "title": "Concepts", "summary": "How the integration works and why." },
+    { "id": "develop", "title": "Develop", "summary": "Build, test and release the integration." }
+  ],
   "versionFrom": "custom_components/bscpylgtv/manifest.json",
   "repo": "https://github.com/belikh/ha-lg-webos-tv",
   "siteUrl": "https://docs.jupiter.au/lg-webos-tv",
