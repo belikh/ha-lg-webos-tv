@@ -7,6 +7,8 @@ The integration connects Home Assistant to an LG TV that runs webOS. It uses the
 
 Its design follows the built-in Home Assistant `webostv` integration. It adds picture calibration sliders, picture mode, sound output and channel selects, power-state and channel sensors, a remote with pointer and text input, screen notifications and raw [[term:SSAP]] commands.
 
+[![Add to Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=belikh&repository=ha-lg-webos-tv&category=integration)
+
 ## What you get
 
 - Setup from the UI with SSDP discovery and a pairing prompt on the TV.

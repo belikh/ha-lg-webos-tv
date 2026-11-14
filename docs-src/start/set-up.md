@@ -10,7 +10,9 @@ Add the TV from **Settings > Devices & Services**. The TV must be on and on the 
 
 ## Add a TV
 
-1. Go to **Settings > Devices & Services > Add Integration** and search for **LG WebOS TV (bscpylgtv)**. Home Assistant often lists the TV as a discovered device already.
+[![Add integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=bscpylgtv)
+
+1. Select the badge above, or go to **Settings > Devices & Services > Add Integration** and search for **LG WebOS TV (bscpylgtv)**. Home Assistant often lists the TV as a discovered device already.
 2. Enter the hostname or IP address of the TV and select **Submit**.
 3. Accept the pairing prompt on the TV screen, then select **Submit** in Home Assistant.
 
